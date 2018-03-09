@@ -163,6 +163,12 @@ Accessors
 
     Returns ``true`` if and only if the line is closed and simple.
 
+.. function:: ST_IsValid(Geometry) -> boolean
+
+    Returns ``true`` if and only if the input geometry is well formed.
+    ``geometry_invalid_reason`` function returns the reason why geometry is
+    not well formed or ``NULL`` if it is.
+
 .. function:: ST_Length(Geometry) -> double
 
     Returns the length of a linestring or multi-linestring using Euclidean measurement on a
