@@ -93,15 +93,19 @@ public class TestJtsGeometryUtils
         Slice geometry = stGeometryFromText(utf8Slice(wkt));
         Geometry expected = WKT_READER.read(wkt);
         Geometry actual = JtsGeometryUtils.deserialize(geometry);
+        Slice serialized = JtsGeometryUtils.serialize(expected);
 
         // ESRI shape serialization format doesn't contain enough information
         // to distinguish between empty LineString and MultiLineString or
         // empty Polygon and MultiPolygon.
         if (expected.isEmpty()) {
             assertTrue(actual.isEmpty());
+            Geometry serializedGeometry = JtsGeometryUtils.deserialize(serialized);
+            assertTrue(serializedGeometry.isEmpty());
         }
         else {
             assertEquals(actual, expected);
+            assertEquals(serialized, geometry);
         }
     }
 }
