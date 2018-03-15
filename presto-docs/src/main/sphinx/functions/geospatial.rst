@@ -194,6 +194,11 @@ Accessors
 
     Returns the first point of a LineString geometry as a Point.
 
+.. function:: ST_SimplifyGeometry(Geometry, double) -> Geometry
+
+    Returns a "simplified" version of the given geometry using the Douglas-Peucker algorithm.
+    Will avoid creating derived geometries (polygons in particular) that are invalid.
+
 .. function:: ST_EndPoint(Geometry) -> point
 
     Returns the last point of a LineString geometry as a Point.
