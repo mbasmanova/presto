@@ -14,15 +14,11 @@
 package com.facebook.presto.geospatial;
 
 import io.airlift.slice.BasicSliceInput;
+import io.airlift.slice.DynamicSliceOutput;
 import io.airlift.slice.Slice;
 import io.airlift.slice.SliceInput;
-import org.locationtech.jts.geom.Coordinate;
-import org.locationtech.jts.geom.Geometry;
-import org.locationtech.jts.geom.GeometryFactory;
-import org.locationtech.jts.geom.LineString;
-import org.locationtech.jts.geom.LinearRing;
-import org.locationtech.jts.geom.Point;
-import org.locationtech.jts.geom.Polygon;
+import org.locationtech.jts.geom.*;
+import org.locationtech.jts.simplify.TopologyPreservingSimplifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,7 +26,6 @@ import java.util.List;
 import static com.facebook.presto.geospatial.GeometryUtils.isEsriNaN;
 import static com.google.common.base.Verify.verify;
 import static io.airlift.slice.SizeOf.SIZE_OF_DOUBLE;
-import static io.airlift.slice.SizeOf.SIZE_OF_INT;
 import static java.util.Objects.requireNonNull;
 
 public class JtsGeometryUtils
@@ -65,6 +60,27 @@ public class JtsGeometryUtils
         }
     }
 
+    /**
+     * Shape type defined by JTS.
+     */
+    private enum JtsShapeType {
+        POINT("Point"),
+        POLYGON("Polygon"),
+        MULTI_LINESTRING("MultiLineString"), // correspond to POLYLINE in ESRI shape type
+        MULTI_POINT("MultiPoint");
+
+        final String typeString;
+
+        JtsShapeType(String type) {
+            this.typeString = type;
+        }
+
+        @Override
+        public String toString() {
+            return typeString;
+        }
+    }
+
     private static final GeometryFactory GEOMETRY_FACTORY = new GeometryFactory();
 
     private JtsGeometryUtils() {}
@@ -81,7 +97,7 @@ public class JtsGeometryUtils
         }
 
         BasicSliceInput input = shape.getInput();
-        input.skip(SIZE_OF_INT); // SRID
+        int spatialReferenceId = input.readInt();
 
         if (input.available() == 0) {
             return GEOMETRY_FACTORY.createGeometryCollection();
@@ -97,7 +113,53 @@ public class JtsGeometryUtils
         if (geometries.size() == 1) {
             return geometries.get(0);
         }
-        return GEOMETRY_FACTORY.createGeometryCollection(geometries.toArray(new Geometry[0]));
+
+        Geometry res = GEOMETRY_FACTORY.createGeometryCollection(geometries.toArray(new Geometry[0]));
+        res.setSRID(spatialReferenceId);
+        return res;
+    }
+
+    /**
+     * Serialize JTS {@link Geometry} shape into an ESRI shape
+     */
+    public static Slice serialize(Geometry geometry) {
+        int spatialReferenceId = geometry.getSRID();
+        DynamicSliceOutput sliceOutput = new DynamicSliceOutput(100);
+        sliceOutput.appendInt(spatialReferenceId);
+
+        int availableGeometry = geometry.getNumGeometries();
+        for (int i = 0; i < availableGeometry; i++) {
+            Geometry unitGeometry = geometry.getGeometryN(i);
+            switch (JtsShapeType.valueOf(unitGeometry.getGeometryType())) {
+                case POINT:
+                    writePoint((Point) unitGeometry, sliceOutput);
+                    break;
+                case MULTI_LINESTRING:
+                    writePolylineOrPolygon((GeometryCollection) unitGeometry, sliceOutput, EsriShapeType.POLYLINE);
+                    break;
+                case POLYGON:
+                    writePolylineOrPolygon((GeometryCollection) unitGeometry, sliceOutput, EsriShapeType.POLYGON);
+                    break;
+                case MULTI_POINT:
+                    writeMultiPoint((MultiPoint) unitGeometry, sliceOutput);
+                    break;
+            }
+        }
+
+        return sliceOutput.slice();
+    }
+
+    /**
+     * Utilize JTS to simplifies a geometry and ensures that the result is a valid geometry having the same dimension
+     * and number of components as the input, and with the components having the same topological relationship.
+     */
+    public static Geometry simplify(Slice shape, double distanceTolerance) {
+        if (shape == null) {
+            return null;
+        }
+
+        Geometry geometry = JtsGeometryUtils.deserialize(shape);
+        return TopologyPreservingSimplifier.simplify(geometry, distanceTolerance);
     }
 
     private static Geometry readGeometry(SliceInput input)
@@ -128,10 +190,26 @@ public class JtsGeometryUtils
         return GEOMETRY_FACTORY.createPoint(coordinates);
     }
 
+    private static void writePoint(Point point, DynamicSliceOutput sliceOutput) {
+        requireNonNull(sliceOutput, "output is null");
+        if (!point.isEmpty()) {
+            sliceOutput.writeInt(EsriShapeType.POINT.code);
+            writeCoordinate(point.getCoordinate(), sliceOutput);
+        } else {
+            throw new IllegalArgumentException("Trying to write an empty point.");
+        }
+    }
+
     private static Coordinate readCoordinate(SliceInput input)
     {
         requireNonNull(input, "input is null");
         return new Coordinate(input.readDouble(), input.readDouble());
+    }
+
+    private static void writeCoordinate(Coordinate point, DynamicSliceOutput sliceOutput) {
+        requireNonNull(sliceOutput, "output is null");
+        sliceOutput.writeDouble(point.x);
+        sliceOutput.writeDouble(point.y);
     }
 
     private static Geometry readMultiPoint(SliceInput input)
@@ -144,6 +222,21 @@ public class JtsGeometryUtils
             points[i] = readPoint(input);
         }
         return GEOMETRY_FACTORY.createMultiPoint(points);
+    }
+
+    private static void writeMultiPoint(MultiPoint geometry, DynamicSliceOutput sliceOutput) {
+        requireNonNull(geometry, "geometry is null");
+        requireNonNull(sliceOutput, "output is null");
+
+        sliceOutput.writeInt(EsriShapeType.MULTI_POINT.code);
+        Envelope env = geometry.getEnvelopeInternal();
+        writeEnvelope(env, sliceOutput);
+
+        sliceOutput.writeInt(geometry.getNumPoints());
+        Coordinate[] points = geometry.getCoordinates();
+        for (Coordinate point : points) {
+            writeCoordinate(point, sliceOutput);
+        }
     }
 
     private static Geometry readPolyline(SliceInput input)
@@ -239,10 +332,61 @@ public class JtsGeometryUtils
         return GEOMETRY_FACTORY.createMultiPolygon(polygons.toArray(new Polygon[0]));
     }
 
+
+    private static void writePolylineOrPolygon(GeometryCollection geometries,
+                                               DynamicSliceOutput sliceOutput,
+                                               EsriShapeType esriShapeType)
+    {
+        requireNonNull(geometries, "polyline is null");
+        requireNonNull(sliceOutput, "output is null");
+
+        if (esriShapeType != EsriShapeType.POLYGON && esriShapeType != EsriShapeType.POLYLINE) {
+            throw new IllegalArgumentException("writePolylineOrPolygon only takes polygon or polyline");
+        }
+
+        sliceOutput.writeInt(esriShapeType.code);
+
+        writeEnvelope(geometries.getEnvelopeInternal(), sliceOutput);
+
+        int partLengh = geometries.getNumGeometries();
+
+        // calculate total number of points
+        int totalPoints = 0;
+        int[] lineStartPointIndex = new int[partLengh + 1];
+        lineStartPointIndex[0] = 0;
+        for (int i = 0; i < partLengh; i++) {
+            int pointsInLine = geometries.getGeometryN(i).getNumPoints();
+            totalPoints += pointsInLine;
+            lineStartPointIndex[i + 1] = pointsInLine;
+        }
+
+        sliceOutput.writeInt(partLengh);
+        sliceOutput.writeInt(totalPoints);
+        for (int i = 0; i < lineStartPointIndex.length; i++) {
+            sliceOutput.writeInt(lineStartPointIndex[i]);
+        }
+        Coordinate[] points = geometries.getCoordinates();
+        for (int i = 0; i < points.length; i++) {
+            writeCoordinate(points[i], sliceOutput);
+        }
+    }
+
     private static void skipEnvelope(SliceInput input)
     {
         requireNonNull(input, "input is null");
         input.skip(4 * SIZE_OF_DOUBLE);
+    }
+
+
+    private static void writeEnvelope(Envelope envelope, DynamicSliceOutput sliceOutput)
+    {
+        requireNonNull(envelope, "envelope is null");
+        requireNonNull(sliceOutput, "output is null");
+
+        sliceOutput.writeDouble(envelope.getMinX());
+        sliceOutput.writeDouble(envelope.getMinY());
+        sliceOutput.writeDouble(envelope.getMaxX());
+        sliceOutput.writeDouble(envelope.getMaxY());
     }
 
     private static boolean isClockwise(Coordinate[] coordinates)

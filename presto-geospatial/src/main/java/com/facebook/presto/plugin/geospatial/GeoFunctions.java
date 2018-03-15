@@ -388,6 +388,16 @@ public final class GeoFunctions
     }
 
     @SqlNullable
+    @Description("Returns a \"simplified\" version of the given geometry")
+    @ScalarFunction("ST_SimplifyGeometry")
+    @SqlType(GEOMETRY_TYPE_NAME)
+    public static Slice stSimplifyGeometry(@SqlType(GEOMETRY_TYPE_NAME) Slice input,
+                                           @SqlType(DOUBLE) double distanceTolerance) {
+        Geometry jtsGeometry = JtsGeometryUtils.simplify(input, distanceTolerance);
+        return JtsGeometryUtils.serialize(jtsGeometry);
+    }
+
+    @SqlNullable
     @Description("Returns the last point of a LINESTRING geometry as a Point")
     @ScalarFunction("ST_EndPoint")
     @SqlType(GEOMETRY_TYPE_NAME)
