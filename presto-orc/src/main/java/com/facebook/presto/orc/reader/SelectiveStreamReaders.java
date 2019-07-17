@@ -65,7 +65,9 @@ public final class SelectiveStreamReaders
             case VARCHAR:
             case CHAR:
             case TIMESTAMP:
+                throw new IllegalArgumentException("Unsupported type: " + streamDescriptor.getStreamType());
             case LIST:
+                return new ListSelectiveStreamReader(streamDescriptor, filters, requiredSubfields, null, 0, outputType, hiveStorageTimeZone, systemMemoryContext);
             case STRUCT:
             case MAP:
             case DECIMAL:

@@ -17,23 +17,34 @@ import com.facebook.presto.Session;
 import com.facebook.presto.testing.QueryRunner;
 import com.facebook.presto.tests.AbstractTestQueryFramework;
 import com.facebook.presto.tests.DistributedQueryRunner;
+import com.google.common.base.Splitter;
 import com.google.common.collect.ImmutableMap;
 import org.testng.annotations.Test;
 
+import java.nio.file.Paths;
+import java.util.List;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static com.facebook.presto.hive.HiveQueryRunner.HIVE_CATALOG;
 import static com.facebook.presto.hive.HiveSessionProperties.PUSHDOWN_FILTER_ENABLED;
 import static io.airlift.tpch.TpchTable.getTables;
+import static java.lang.String.format;
 
 public class TestHivePushdownFilterQueries
         extends AbstractTestQueryFramework
 {
-    private static final String WITH_LINEITEM_EX = "WITH lineitem_ex AS (" +
-            "SELECT linenumber, orderkey, " +
-            "   CASE WHEN linenumber % 7 = 0 THEN null ELSE shipmode = 'AIR' END AS ship_by_air, " +
-            "   CASE WHEN linenumber % 5 = 0 THEN null ELSE returnflag = 'R' END AS is_returned " +
-            "FROM lineitem)";
+    private static final Pattern ARRAY_SUBSCRIPT_PATTERN = Pattern.compile("([a-z_+]+)((\\[[0-9]+\\])+)");
+
+    private static final String WITH_LINEITEM_EX = "WITH lineitem_ex AS (\n" +
+            "SELECT linenumber, orderkey, partkey, suppkey, \n" +
+            "   CASE WHEN linenumber % 5 = 0 THEN null ELSE shipmode = 'AIR' END AS ship_by_air, \n" +
+            "   CASE WHEN linenumber % 7 = 0 THEN null ELSE returnflag = 'R' END AS is_returned, \n" +
+            "   CASE WHEN orderkey % 11 = 0 THEN null ELSE (orderkey, partkey, suppkey) END AS keys, \n" +
+            "   CASE WHEN orderkey % 13 = 0 THEN null ELSE ((orderkey, partkey), (suppkey,), CASE WHEN orderkey % 17 = 0 THEN null ELSE (orderkey, partkey) END) END AS nested_keys, \n" +
+            "   CASE WHEN orderkey % 17 = 0 THEN null ELSE (shipmode = 'AIR', returnflag = 'R') END as flags\n" +
+            "FROM lineitem)\n";
 
     protected TestHivePushdownFilterQueries()
     {
@@ -47,15 +58,20 @@ public class TestHivePushdownFilterQueries
                 ImmutableMap.of(),
                 "sql-standard",
                 ImmutableMap.of("hive.pushdown-filter-enabled", "true"),
-                Optional.empty());
+                Optional.of(Paths.get("/Users/mbasmanova/aria/test_data")));
 
-        queryRunner.execute(noPushdownFilter(queryRunner.getDefaultSession()),
-                "CREATE TABLE lineitem_ex (linenumber, orderkey, ship_by_air, is_returned) AS " +
-                        "SELECT linenumber, " +
-                        "   orderkey, " +
-                        "   IF (linenumber % 7 = 0, null, shipmode = 'AIR') AS ship_by_air, " +
-                        "   IF (linenumber % 5 = 0, null, returnflag = 'R') AS is_returned " +
-                        "FROM lineitem");
+//        queryRunner.execute("DROP TABLE IF EXISTS lineitem_ex");
+        if (!queryRunner.tableExists(queryRunner.getDefaultSession(), "lineitem_ex")) {
+            queryRunner.execute(noPushdownFilter(queryRunner.getDefaultSession()),
+                    "CREATE TABLE lineitem_ex (linenumber, orderkey, partkey, suppkey, ship_by_air, is_returned, keys, nested_keys, flags) AS " +
+                            "SELECT linenumber, orderkey, partkey, suppkey, " +
+                            "   IF (linenumber % 5 = 0, null, shipmode = 'AIR') AS ship_by_air, " +
+                            "   IF (linenumber % 7 = 0, null, returnflag = 'R') AS is_returned, " +
+                            "   IF (orderkey % 11 = 0, null, ARRAY[orderkey, partkey, suppkey]), " +
+                            "   IF (orderkey % 13 = 0, null, ARRAY[ARRAY[orderkey, partkey], ARRAY[suppkey], IF (orderkey % 17 = 0, null, ARRAY[orderkey, partkey])]), " +
+                            "   IF (orderkey % 17 = 0, null, ARRAY[shipmode = 'AIR', returnflag = 'R']) " +
+                            "FROM lineitem");
+        }
 
         return queryRunner;
     }
@@ -103,6 +119,72 @@ public class TestHivePushdownFilterQueries
     }
 
     @Test
+    public void testArrays()
+    {
+        // read all positions
+        assertQueryUsingH2Cte("SELECT * FROM lineitem_ex");
+
+        // top-level IS [NOT] NULL filters
+        assertFilterProject("keys IS NULL", "orderkey, flags");
+        assertFilterProject("nested_keys IS NULL", "keys, flags");
+
+        assertFilterProject("flags IS NOT NULL", "keys, orderkey");
+        assertFilterProject("nested_keys IS NOT NULL", "keys, flags");
+
+        // mid-level IS [NOR] NULL filters
+        assertFilterProject("nested_keys[3] IS NULL", "keys, flags");
+        assertFilterProject("nested_keys[3] IS NOT NULL", "keys, flags");
+
+        // read selected positions
+        assertQueryUsingH2Cte("SELECT * FROM lineitem_ex WHERE orderkey = 1");
+
+        // read all positions; extract selected positions
+        assertQueryUsingH2Cte("SELECT * FROM lineitem_ex WHERE orderkey % 3 = 1");
+
+        // filter
+        assertFilterProject("keys[2] = 1", "orderkey, flags");
+        assertFilterProject("nested_keys[1][2] = 1", "orderkey, flags");
+
+        // filter function
+        assertFilterProject("keys[2] % 3 = 1", "orderkey, flags");
+        assertFilterProject("nested_keys[1][2] % 3 = 1", "orderkey, flags");
+
+        // less selective filter
+        assertFilterProject("keys[1] < 1000", "orderkey, flags");
+        assertFilterProject("nested_keys[1][1] < 1000", "orderkey, flags");
+
+        // filter plus filter function
+        assertFilterProject("keys[1] < 1000 AND keys[2] % 3 = 1", "orderkey, flags");
+        assertFilterProject("nested_keys[1][1] < 1000 AND nested_keys[1][2] % 3 = 1", "orderkey, flags");
+
+        // filter function on multiple columns
+        assertFilterProject("keys[1] % 3 = 1 AND (orderkey + keys[2]) % 5 = 1", "orderkey, flags");
+        assertFilterProject("nested_keys[1][1] % 3 = 1 AND (orderkey + nested_keys[1][2]) % 5 = 1", "orderkey, flags");
+
+        // filter on multiple columns, plus filter function
+        assertFilterProject("keys[1] < 1000 AND flags[2] = true AND keys[2] % 2 = if(flags[1], 0, 1)", "orderkey, flags");
+        assertFilterProject("nested_keys[1][1] < 1000 AND flags[2] = true AND nested_keys[1][2] % 2 = if(flags[1], 0, 1)", "orderkey, flags");
+
+        // filters at different levels
+        assertFilterProject("nested_keys IS NOT NULL AND nested_keys[1][1] > 0", "keys");
+        assertFilterProject("nested_keys[3] IS NULL AND nested_keys[2][1] > 10", "keys, flags");
+        assertFilterProject("nested_keys[3] IS NOT NULL AND nested_keys[1][2] > 10", "keys, flags");
+        assertFilterProject("nested_keys IS NOT NULL AND nested_keys[3] IS NOT NULL AND nested_keys[1][1] > 0", "keys");
+        assertFilterProject("nested_keys IS NOT NULL AND nested_keys[3] IS NULL AND nested_keys[1][1] > 0", "keys");
+
+        assertQueryFails("SELECT * FROM lineitem_ex WHERE keys[5] > 0", "Array subscript out of bounds");
+        assertQueryFails("SELECT * FROM lineitem_ex WHERE nested_keys[5][1] > 0", "Array subscript out of bounds");
+        assertQueryFails("SELECT * FROM lineitem_ex WHERE nested_keys[1][5] > 0", "Array subscript out of bounds");
+        assertQueryFails("SELECT * FROM lineitem_ex WHERE nested_keys[2][5] > 0", "Array subscript out of bounds");
+    }
+
+    private void assertFilterProject(String filter, String projections)
+    {
+        assertQueryUsingH2Cte(format("SELECT * FROM lineitem_ex WHERE %s", filter));
+        assertQueryUsingH2Cte(format("SELECT %s FROM lineitem_ex WHERE %s", projections, filter));
+    }
+
+    @Test
     public void testFilterFunctions()
     {
         // filter function on orderkey; orderkey is projected out
@@ -124,7 +206,7 @@ public class TestHivePushdownFilterQueries
         assertQueryFails("SELECT custkey, orderdate FROM orders WHERE array[1, 2, 3][orderkey % 5 + custkey % 7 + 1] > 0", "Array subscript out of bounds");
 
         // filter function with "recoverable" error
-        assertQuery("SELECT custkey, orderdate FROM orders WHERE array[1, 2, 3][orderkey % 5 + custkey %7 + 1] > 0 AND orderkey % 5 = 1 AND custkey % 7 = 0", "SELECT custkey, orderdate FROM orders WHERE orderkey % 5 = 1 AND custkey % 7 = 0");
+        assertQuery("SELECT custkey, orderdate FROM orders WHERE array[1, 2, 3][orderkey % 5 + custkey % 7 + 1] > 0 AND orderkey % 5 = 1 AND custkey % 7 = 0", "SELECT custkey, orderdate FROM orders WHERE orderkey % 5 = 1 AND custkey % 7 = 0");
 
         // filter function on numeric and boolean columnss
         assertQuery("SELECT linenumber FROM lineitem_ex WHERE if(is_returned, linenumber, orderkey) % 5 = 0", WITH_LINEITEM_EX + "SELECT linenumber FROM lineitem_ex WHERE CASE WHEN is_returned THEN linenumber ELSE orderkey END % 5 = 0");
@@ -171,7 +253,31 @@ public class TestHivePushdownFilterQueries
 
     private void assertQueryUsingH2Cte(String query)
     {
-        assertQuery(query, WITH_LINEITEM_EX + query);
+        assertQuery(query, WITH_LINEITEM_EX + toH2(query));
+    }
+
+    private static String toH2(String query)
+    {
+        return replaceArraySubscripts(query).replaceAll(" if\\(", " casewhen(");
+    }
+
+    private static String replaceArraySubscripts(String query)
+    {
+        Matcher matcher = ARRAY_SUBSCRIPT_PATTERN.matcher(query);
+
+        StringBuffer buffer = new StringBuffer();
+        while (matcher.find())
+        {
+            String expression =  matcher.group(1);
+            List<String> indices = Splitter.onPattern("[^0-9]").omitEmptyStrings().splitToList(matcher.group(2));
+            for (int i = 0; i < indices.size(); i++) {
+                expression = format("array_get(%s, %s)", expression, indices.get(i));
+            }
+
+            matcher.appendReplacement(buffer, expression);
+        }
+        matcher.appendTail(buffer);
+        return buffer.toString();
     }
 
     private static Session noPushdownFilter(Session session)
