@@ -18,9 +18,11 @@ import com.facebook.presto.orc.StreamDescriptor;
 import com.facebook.presto.orc.TupleDomainFilter;
 import com.facebook.presto.spi.Subfield;
 import com.facebook.presto.spi.type.Type;
+import com.google.common.collect.Iterables;
 import org.joda.time.DateTimeZone;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -31,24 +33,31 @@ public final class SelectiveStreamReaders
 
     public static SelectiveStreamReader createStreamReader(
             StreamDescriptor streamDescriptor,
-            Optional<TupleDomainFilter> filter,
+            Map<Subfield, TupleDomainFilter> filters,
             Optional<Type> outputType,
             List<Subfield> requiredSubfields,
             DateTimeZone hiveStorageTimeZone,
             AggregatedMemoryContext systemMemoryContext)
     {
         switch (streamDescriptor.getStreamType()) {
-            case BOOLEAN:
+            case BOOLEAN: {
+                checkArgument(filters.size() <= 1, "Boolean stream reader doesn't support multiple range filters");
                 checkArgument(requiredSubfields.isEmpty(), "Boolean stream reader doesn't support subfields");
+
+                Optional<TupleDomainFilter> filter = filters.isEmpty() ? Optional.empty() : Optional.of(Iterables.getOnlyElement(filters.values()));
                 return new BooleanSelectiveStreamReader(streamDescriptor, filter, outputType.isPresent(), systemMemoryContext.newLocalMemoryContext(SelectiveStreamReaders.class.getSimpleName()));
+            }
             case BYTE:
                 throw new IllegalArgumentException("Unsupported type: " + streamDescriptor.getStreamType());
             case SHORT:
             case INT:
             case LONG:
-            case DATE:
+            case DATE: {
+                checkArgument(filters.size() <= 1, "Primitive type stream reader doesn't support multiple range filters");
                 checkArgument(requiredSubfields.isEmpty(), "Primitive type stream reader doesn't support subfields");
+                Optional<TupleDomainFilter> filter = filters.isEmpty() ? Optional.empty() : Optional.of(Iterables.getOnlyElement(filters.values()));
                 return new LongSelectiveStreamReader(streamDescriptor, filter, outputType, systemMemoryContext);
+            }
             case FLOAT:
             case DOUBLE:
             case BINARY:
