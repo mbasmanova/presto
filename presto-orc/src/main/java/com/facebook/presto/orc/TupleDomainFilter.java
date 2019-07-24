@@ -50,6 +50,10 @@ public interface TupleDomainFilter
 
     boolean testBytes(byte[] buffer, int offset, int length);
 
+    int getPrecedingPositionsToFail();
+
+    int getSucceedingPositionsToFail();
+
     abstract class AbstractTupleDomainFilter
             implements TupleDomainFilter
     {
@@ -107,6 +111,18 @@ public interface TupleDomainFilter
         public boolean testBytes(byte[] buffer, int offset, int length)
         {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int getPrecedingPositionsToFail()
+        {
+            return 0;
+        }
+
+        @Override
+        public int getSucceedingPositionsToFail()
+        {
+            return 0;
         }
     }
 
