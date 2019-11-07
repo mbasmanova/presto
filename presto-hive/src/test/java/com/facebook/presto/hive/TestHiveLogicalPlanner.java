@@ -44,7 +44,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import org.testng.annotations.Test;
 
-import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.Optional;
@@ -569,56 +568,22 @@ public class TestHiveLogicalPlanner
                     anyTree(join(INNER, ImmutableList.of(equiJoinClause("l_orderkey", "o_orderkey")),
                             anyTree(PlanMatchPattern.tableScan("lineitem", ImmutableMap.of("l_orderkey", "orderkey"))),
                             anyTree(PlanMatchPattern.tableScan("orders_ex", ImmutableMap.of("o_orderkey", "orderkey"))))));
+
+            assertPlan(joinReorderingOff, "SELECT l.discount, l.orderkey, o.totalprice FROM lineitem l, orders o WHERE l.orderkey = o.orderkey AND l.quantity < 2 AND o.totalprice BETWEEN 0 AND 200000",
+                    anyTree(
+                            node(JoinNode.class,
+                                    anyTree(tableScan("lineitem", ImmutableMap.of())),
+                                    anyTree(tableScan("orders", ImmutableMap.of())))));
+
+            assertPlan(joinReorderingOn, "SELECT l.discount, l.orderkey, o.totalprice FROM lineitem l, orders o WHERE l.orderkey = o.orderkey AND l.quantity < 2 AND o.totalprice BETWEEN 0 AND 200000",
+                    anyTree(
+                            node(JoinNode.class,
+                                    anyTree(tableScan("orders", ImmutableMap.of())),
+                                    anyTree(tableScan("lineitem", ImmutableMap.of())))));
         }
         finally {
             assertUpdate("DROP TABLE orders_ex");
         }
-    }
-
-    // Make sure pushdown filters are correctly understood by the CBO
-    @Test
-    public void testPushdownFilterUpdatesTableStatistics()
-    {
-        Session pushdownFilterEnabled = Session.builder(pushdownFilterEnabled())
-                .setSystemProperty(JOIN_REORDERING_STRATEGY, FeaturesConfig.JoinReorderingStrategy.AUTOMATIC.name())
-                .build();
-
-        Session pushdownFilterDisabled = Session.builder(getQueryRunner().getDefaultSession())
-                .setSystemProperty(JOIN_REORDERING_STRATEGY, FeaturesConfig.JoinReorderingStrategy.AUTOMATIC.name())
-                .build();
-
-        Session joinReorderingOff = Session.builder(pushdownFilterEnabled())
-                .setSystemProperty(JOIN_REORDERING_STRATEGY, FeaturesConfig.JoinReorderingStrategy.ELIMINATE_CROSS_JOINS.name())
-                .build();
-
-        // (lineitem is larger than orders)
-        // Classic (Reorder + no pushdown): Switch
-        assertPlan(pushdownFilterDisabled, "SELECT a.discount, a.orderkey, b.totalprice FROM orders b, lineitem a WHERE a.orderkey = b.orderkey",
-                anyTree(
-                        node(JoinNode.class,
-                                anyTree(tableScan("lineitem", ImmutableMap.of())),
-                                anyTree(tableScan("orders", ImmutableMap.of())))));
-
-        // Simple (reorder + pushdown): Switch
-        assertPlan(pushdownFilterEnabled, "SELECT a.discount, a.orderkey, b.totalprice FROM orders b, lineitem a WHERE a.orderkey = b.orderkey",
-                anyTree(
-                        node(JoinNode.class,
-                                anyTree(tableScan("lineitem", ImmutableMap.of())),
-                                anyTree(tableScan("orders", ImmutableMap.of())))));
-
-        // Add filter (no reorder + yes pushdown): Don't switch
-        assertPlan(joinReorderingOff, "SELECT a.discount, a.orderkey, b.totalprice FROM lineitem a, orders b WHERE a.orderkey = b.orderkey AND a.quantity < 2 AND b.totalprice BETWEEN 0 AND 200000",
-                anyTree(
-                        node(JoinNode.class,
-                                anyTree(tableScan("lineitem", ImmutableMap.of())),
-                                anyTree(tableScan("orders", ImmutableMap.of())))));
-
-        // Add filter (reorder + pushdown): Switch
-        assertPlan(pushdownFilterEnabled, "SELECT a.discount, a.orderkey, b.totalprice FROM lineitem a, orders b WHERE a.orderkey = b.orderkey AND a.quantity < 2 AND b.totalprice BETWEEN 0 AND 200000",
-                anyTree(
-                        node(JoinNode.class,
-                                anyTree(tableScan("orders", ImmutableMap.of())),
-                                anyTree(tableScan("lineitem", ImmutableMap.of())))));
     }
 
     private static Set<Subfield> toSubfields(String... subfieldPaths)
