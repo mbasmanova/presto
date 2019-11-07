@@ -21,7 +21,7 @@ import com.facebook.presto.connector.system.MetadataBasedSystemTablesProvider;
 import com.facebook.presto.connector.system.StaticSystemTablesProvider;
 import com.facebook.presto.connector.system.SystemConnector;
 import com.facebook.presto.connector.system.SystemTablesProvider;
-import com.facebook.presto.cost.ConnectorFilterCalculatorService;
+import com.facebook.presto.cost.ConnectorFilterStatsCalculatorService;
 import com.facebook.presto.cost.FilterStatsCalculator;
 import com.facebook.presto.index.IndexManager;
 import com.facebook.presto.metadata.Catalog;
@@ -358,7 +358,7 @@ public class ConnectorManager
                         predicateCompiler,
                         determinismEvaluator,
                         new RowExpressionFormatter(metadataManager.getFunctionManager())),
-                new ConnectorFilterCalculatorService(metadataManager, filterStatsCalculator));
+                new ConnectorFilterStatsCalculatorService(filterStatsCalculator));
 
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(factory.getClass().getClassLoader())) {
             return factory.create(connectorId.getCatalogName(), properties, context);

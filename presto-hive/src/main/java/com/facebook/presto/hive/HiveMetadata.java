@@ -660,7 +660,7 @@ public class HiveMetadata
 
         Map<ColumnHandle, Type> columnTypes = columns.values().stream()
                 .collect(toImmutableMap(Function.identity(), column -> getColumnMetadata(session, tableHandle, column).getType()));
-        return filterStatsCalculatorService.filterStats(tableStatistics, combinedPredicate, columnTypes, session, columnNames);
+        return filterStatsCalculatorService.filterStats(tableStatistics, combinedPredicate, session, columnNames, columnTypes);
     }
 
     private List<SchemaTableName> listTables(ConnectorSession session, SchemaTablePrefix prefix)

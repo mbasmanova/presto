@@ -15,7 +15,7 @@ package com.facebook.presto.hive;
 
 import com.facebook.presto.PagesIndexPageSorter;
 import com.facebook.presto.block.BlockEncodingManager;
-import com.facebook.presto.cost.ConnectorFilterCalculatorService;
+import com.facebook.presto.cost.ConnectorFilterStatsCalculatorService;
 import com.facebook.presto.cost.FilterStatsCalculator;
 import com.facebook.presto.cost.ScalarStatsCalculator;
 import com.facebook.presto.cost.StatsNormalizer;
@@ -120,8 +120,7 @@ public final class HiveTestUtils
         }
     };
 
-    public static final FilterStatsCalculatorService FILTER_STATS_CALCULATOR_SERVICE = new ConnectorFilterCalculatorService(
-            METADATA,
+    public static final FilterStatsCalculatorService FILTER_STATS_CALCULATOR_SERVICE = new ConnectorFilterStatsCalculatorService(
             new FilterStatsCalculator(METADATA, new ScalarStatsCalculator(METADATA), new StatsNormalizer()));
 
     static {

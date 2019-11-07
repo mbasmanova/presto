@@ -23,9 +23,9 @@ import com.facebook.presto.spi.type.Type;
 import java.util.Map;
 
 /**
- * A way to take a pushed-down filter and use it to enrich/reshape TableStatistics
+ * Estimates the size of the data after applying a predicate using calculations compatible with Cost-Based Optimizer.
  */
 public interface FilterStatsCalculatorService
 {
-    TableStatistics filterStats(TableStatistics tableStatistics, RowExpression predicate, Map<ColumnHandle, Type> columnTypes, ConnectorSession session, Map<ColumnHandle, String> columnNames);
+    TableStatistics filterStats(TableStatistics tableStatistics, RowExpression predicate, ConnectorSession session, Map<ColumnHandle, String> columnNames, Map<ColumnHandle, Type> columnTypes);
 }

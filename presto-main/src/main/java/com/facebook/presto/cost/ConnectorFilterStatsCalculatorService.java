@@ -14,7 +14,6 @@
 
 package com.facebook.presto.cost;
 
-import com.facebook.presto.metadata.Metadata;
 import com.facebook.presto.spi.ColumnHandle;
 import com.facebook.presto.spi.ConnectorSession;
 import com.facebook.presto.spi.plan.FilterStatsCalculatorService;
@@ -26,74 +25,65 @@ import com.facebook.presto.spi.statistics.DoubleRange;
 import com.facebook.presto.spi.statistics.Estimate;
 import com.facebook.presto.spi.statistics.TableStatistics;
 import com.facebook.presto.spi.type.Type;
+import com.google.common.collect.ImmutableBiMap;
 
-import java.util.HashMap;
 import java.util.Map;
 
 import static com.facebook.presto.cost.TableScanStatsRule.toSymbolStatistics;
 import static java.util.Objects.requireNonNull;
 
-public class ConnectorFilterCalculatorService
+public class ConnectorFilterStatsCalculatorService
         implements FilterStatsCalculatorService
 {
     private final FilterStatsCalculator filterStatsCalculator;
-    private final Metadata metadata;
 
-    public ConnectorFilterCalculatorService(Metadata metadata, FilterStatsCalculator filterStatsCalculator)
+    public ConnectorFilterStatsCalculatorService(FilterStatsCalculator filterStatsCalculator)
     {
         this.filterStatsCalculator = requireNonNull(filterStatsCalculator, "filterStatsCalculator is null");
-        this.metadata = requireNonNull(metadata, "metadata is null");
     }
 
     @Override
     public TableStatistics filterStats(
             TableStatistics tableStatistics,
             RowExpression predicate,
-            Map<ColumnHandle, Type> columnTypes,
             ConnectorSession session,
-            Map<ColumnHandle, String> columnNames)
+            Map<ColumnHandle, String> columnNames,
+            Map<ColumnHandle, Type> columnTypes)
     {
-        Map<VariableReferenceExpression, ColumnHandle> storeColumnHandle = new HashMap<>();
-
-        PlanNodeStatsEstimate beforeFilterStatsEstimate = tableStatsToPlanNodeStats(tableStatistics, columnTypes, storeColumnHandle, columnNames);
+        PlanNodeStatsEstimate beforeFilterStatsEstimate = toPlanNodeStats(tableStatistics, columnNames, columnTypes);
         PlanNodeStatsEstimate afterFilterStatsEstimate = filterStatsCalculator.filterStats(beforeFilterStatsEstimate, predicate, session);
-        return planNodeStatsToTableStats(afterFilterStatsEstimate, metadata, storeColumnHandle);
+        return toTableStatistics(afterFilterStatsEstimate, ImmutableBiMap.copyOf(columnNames).inverse());
     }
 
-    private PlanNodeStatsEstimate tableStatsToPlanNodeStats(
+    private static PlanNodeStatsEstimate toPlanNodeStats(
             TableStatistics tableStatistics,
-            Map<ColumnHandle, Type> columnTypes,
-            Map<VariableReferenceExpression, ColumnHandle> storeColumnHandle,
-            Map<ColumnHandle, String> columnNames)
+            Map<ColumnHandle, String> columnNames,
+            Map<ColumnHandle, Type> columnTypes)
     {
-        Map<VariableReferenceExpression, VariableStatsEstimate> outputVariableStats = new HashMap<>();
+        PlanNodeStatsEstimate.Builder builder = PlanNodeStatsEstimate.builder()
+                .setOutputRowCount(tableStatistics.getRowCount().getValue());
 
         for (Map.Entry<ColumnHandle, ColumnStatistics> entry : tableStatistics.getColumnStatistics().entrySet()) {
             String columnName = columnNames.get(entry.getKey());
             Type type = columnTypes.get(entry.getKey());
-            VariableReferenceExpression variableReferenceExpression = new VariableReferenceExpression(columnName, type);
 
-            storeColumnHandle.put(variableReferenceExpression, entry.getKey());
-            outputVariableStats.put(variableReferenceExpression, toSymbolStatistics(tableStatistics, entry.getValue()));
+            builder.addVariableStatistics(new VariableReferenceExpression(columnName, type), toSymbolStatistics(tableStatistics, entry.getValue()));
         }
-        return PlanNodeStatsEstimate.builder()
-                .setOutputRowCount(tableStatistics.getRowCount().getValue())
-                .addVariableStatistics(outputVariableStats)
-                .build();
+        return builder.build();
     }
 
-    private TableStatistics planNodeStatsToTableStats(PlanNodeStatsEstimate planNodeStats, Metadata metadata, Map<VariableReferenceExpression, ColumnHandle> toColumnHandle)
+    private static TableStatistics toTableStatistics(PlanNodeStatsEstimate planNodeStats, Map<String, ColumnHandle> columnByName)
     {
-        double rowCount = planNodeStats.getOutputRowCount();
         TableStatistics.Builder builder = TableStatistics.builder();
         if (planNodeStats.isOutputRowCountUnknown()) {
             builder.setRowCount(Estimate.unknown());
             return builder.build();
         }
 
+        double rowCount = planNodeStats.getOutputRowCount();
         builder.setRowCount(Estimate.of(rowCount));
         for (Map.Entry<VariableReferenceExpression, VariableStatsEstimate> entry : planNodeStats.getVariableStatistics().entrySet()) {
-            builder.setColumnStatistics(toColumnHandle.get(entry.getKey()), toColumnStatistics(entry.getValue(), rowCount));
+            builder.setColumnStatistics(columnByName.get(entry.getKey().getName()), toColumnStatistics(entry.getValue(), rowCount));
         }
         return builder.build();
     }
@@ -103,6 +93,7 @@ public class ConnectorFilterCalculatorService
         if (variableStatsEstimate.isUnknown()) {
             return ColumnStatistics.empty();
         }
+
         double nullsFractionDouble = variableStatsEstimate.getNullsFraction();
         double nonNullRowsCount = rowCount * (1.0 - nullsFractionDouble);
 
