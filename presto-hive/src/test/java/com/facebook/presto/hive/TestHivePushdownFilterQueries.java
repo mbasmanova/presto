@@ -818,11 +818,45 @@ public class TestHivePushdownFilterQueries
     public void testRcAndTextFormats()
             throws IOException
     {
-        getQueryRunner().execute("CREATE TABLE lineitem_ex_partitioned WITH (format='ORC', partitioned_by=ARRAY['ds']) AS " +
-                "SELECT linenumber, orderkey, partkey, suppkey, quantity, extendedprice, tax, shipinstruct, shipmode, ship_by_air, " +
-                "is_returned, ship_day, ship_month, ship_timestamp, commit_timestamp, discount_real, discount, tax_real, ship_day_month, " +
-                "discount_long_decimal, tax_short_decimal, long_decimals, keys, doubles, nested_keys, flags, reals, info, dates, timestamps, " +
-                "comment, uppercase_comment, fixed_comment, char_array, varchar_array, '2019-11-01' AS ds FROM lineitem_ex");
+        getQueryRunner().execute("CREATE TABLE lineitem_ex_partitioned WITH (format = 'ORC', partitioned_by = ARRAY['ds']) AS\n" +
+                "SELECT\n" +
+                "    linenumber,\n" +
+                "    orderkey,\n" +
+                "    partkey,\n" +
+                "    suppkey,\n" +
+                "    quantity,\n" +
+                "    extendedprice,\n" +
+                "    tax,\n" +
+                "    shipinstruct,\n" +
+                "    shipmode,\n" +
+                "    ship_by_air,\n" +
+                "    is_returned,\n" +
+                "    ship_day,\n" +
+                "    ship_month,\n" +
+                "    ship_timestamp,\n" +
+                "    commit_timestamp,\n" +
+                "    discount_real,\n" +
+                "    discount,\n" +
+                "    tax_real,\n" +
+                "    ship_day_month,\n" +
+                "    discount_long_decimal,\n" +
+                "    tax_short_decimal,\n" +
+                "    long_decimals,\n" +
+                "    keys,\n" +
+                "    doubles,\n" +
+                "    nested_keys,\n" +
+                "    flags,\n" +
+                "    reals,\n" +
+                "    info,\n" +
+                "    dates,\n" +
+                "    timestamps,\n" +
+                "    comment,\n" +
+                "    uppercase_comment,\n" +
+                "    fixed_comment,\n" +
+                "    char_array,\n" +
+                "    varchar_array,\n" +
+                "    '2019-11-01' AS ds\n" +
+                "FROM lineitem_ex");
         try {
             for (HiveStorageFormat format : ImmutableList.of(RCBINARY, RCTEXT, TEXTFILE)) {
                 assertFileFormat(format);
@@ -836,11 +870,12 @@ public class TestHivePushdownFilterQueries
     private void assertFileFormat(HiveStorageFormat storageFormat)
             throws IOException
     {
+        // Make an ORC table backed by file of some other format
         QueryRunner queryRunner = getQueryRunner();
-        try {
-            queryRunner.execute("CREATE TABLE test_file_format_orc WITH (format='ORC', partitioned_by=ARRAY['ds']) AS " +
-                    "SELECT * FROM lineitem_ex_partitioned LIMIT 1");
+        queryRunner.execute("CREATE TABLE test_file_format_orc WITH (format='ORC', partitioned_by=ARRAY['ds']) AS " +
+                "SELECT * FROM lineitem_ex_partitioned LIMIT 1");
 
+        try {
             queryRunner.execute(format("CREATE TABLE test_file_format WITH (format='%s', partitioned_by=ARRAY['ds']) AS " +
                     "SELECT * FROM lineitem_ex_partitioned", storageFormat));
 
@@ -850,49 +885,45 @@ public class TestHivePushdownFilterQueries
             Path otherDirectory = getPartitionDirectory("test_file_format", "ds='2019-11-01'");
             Files.move(otherDirectory, orcDirectory, REPLACE_EXISTING);
 
-            String cte = "WITH test_file_format_orc AS (\n" +
-                    "SELECT linenumber, orderkey, partkey, suppkey, quantity, extendedprice, tax, shipinstruct, shipmode, \n" +
-                    "   CASE WHEN linenumber % 5 = 0 THEN null ELSE shipmode = 'AIR' END AS ship_by_air, \n" +
-                    "   CASE WHEN linenumber % 7 = 0 THEN null ELSE returnflag = 'R' END AS is_returned, \n" +
-                    "   CASE WHEN linenumber % 4 = 0 THEN null ELSE CAST(day(shipdate) AS TINYINT) END AS ship_day, " +
-                    "   CASE WHEN linenumber % 6 = 0 THEN null ELSE CAST(month(shipdate) AS TINYINT) END AS ship_month, " +
-                    "   CASE WHEN linenumber % 3 = 0 THEN null ELSE CAST(shipdate AS TIMESTAMP) END AS ship_timestamp, \n" +
-                    "   CASE WHEN orderkey % 3 = 0 THEN null ELSE CAST(commitdate AS TIMESTAMP) END AS commit_timestamp, \n" +
-                    "   CASE WHEN orderkey % 5 = 0 THEN null ELSE CAST(discount AS REAL) END AS discount_real, \n" +
-                    "   CASE WHEN orderkey % 43  = 0 THEN null ELSE discount END as discount, \n" +
-                    "   CASE WHEN orderkey % 7 = 0 THEN null ELSE CAST(tax AS REAL) END AS tax_real, \n" +
-                    "   CASE WHEN linenumber % 2 = 0 THEN null ELSE (CAST(day(shipdate) AS TINYINT) , CAST(month(shipdate) AS TINYINT)) END AS ship_day_month, " +
-                    "   CASE WHEN orderkey % 37 = 0 THEN null ELSE CAST(discount AS DECIMAL(20, 8)) END AS discount_long_decimal, " +
-                    "   CASE WHEN orderkey % 41 = 0 THEN null ELSE CAST(tax AS DECIMAL(3, 2)) END AS tax_short_decimal, " +
-                    "   CASE WHEN orderkey % 43 = 0 THEN null ELSE (CAST(discount AS DECIMAL(20, 8)), CAST(tax AS DECIMAL(20, 8))) END AS long_decimals, " +
-                    "   CASE WHEN orderkey % 11 = 0 THEN null ELSE (orderkey, partkey, suppkey) END AS keys, \n" +
-                    "   CASE WHEN orderkey % 41 = 0 THEN null ELSE (extendedprice, discount, tax) END AS doubles, \n" +
-                    "   CASE WHEN orderkey % 13 = 0 THEN null ELSE ((orderkey, partkey), (suppkey,), CASE WHEN orderkey % 17 = 0 THEN null ELSE (orderkey, partkey) END) END AS nested_keys, \n" +
-                    "   CASE WHEN orderkey % 17 = 0 THEN null ELSE (shipmode = 'AIR', returnflag = 'R') END as flags, \n" +
-                    "   CASE WHEN orderkey % 19 = 0 THEN null ELSE (CAST(discount AS REAL), CAST(tax AS REAL)) END as reals, \n" +
-                    "   CASE WHEN orderkey % 23 = 0 THEN null ELSE (orderkey, linenumber, (CAST(day(shipdate) as TINYINT), CAST(month(shipdate) AS TINYINT), CAST(year(shipdate) AS INTEGER))) END AS info, \n" +
-                    "   CASE WHEN orderkey % 31 = 0 THEN null ELSE (" +
-                    "       (CAST(day(shipdate) AS TINYINT), CAST(month(shipdate) AS TINYINT), CAST(year(shipdate) AS INTEGER)), " +
-                    "       (CAST(day(commitdate) AS TINYINT), CAST(month(commitdate) AS TINYINT), CAST(year(commitdate) AS INTEGER)), " +
-                    "       (CAST(day(receiptdate) AS TINYINT), CAST(month(receiptdate) AS TINYINT), CAST(year(receiptdate) AS INTEGER))) END AS dates, \n" +
-                    "   CASE WHEN orderkey % 37 = 0 THEN null ELSE (CAST(shipdate AS TIMESTAMP), CAST(commitdate AS TIMESTAMP)) END AS timestamps, \n" +
-                    "   CASE WHEN orderkey % 43 = 0 THEN null ELSE comment END AS comment, \n" +
-                    "   CASE WHEN orderkey % 43 = 0 THEN null ELSE upper(comment) END AS uppercase_comment, \n" +
-                    "   CASE WHEN orderkey % 47 = 0 THEN null ELSE CAST(comment AS CHAR(5)) END AS fixed_comment, \n" +
-                    "   CASE WHEN orderkey % 49 = 0 THEN null ELSE (CAST(comment AS CHAR(4)), CAST(comment AS CHAR(3)), CAST(SUBSTR(comment,length(comment) - 4) AS CHAR(4))) END AS char_array, \n" +
-                    "   CASE WHEN orderkey % 49 = 0 THEN null ELSE (comment, comment) END AS varchar_array, \n" +
-                    "'2019-11-01' AS ds \n" +
-                    "FROM lineitem) \n";
-
-            Function<String, String> rewriter = query -> query.replaceAll("info.orderkey", "info[1]")
-                    .replaceAll("info.linenumber", "info[2]")
-                    .replaceAll("info.shipdate.ship_day", "info[3][1]")
-                    .replaceAll("info.shipdate.ship_year", "info[3][3]")
-                    .replaceAll("info.shipdate", "info[3]")
-                    .replaceAll("dates\\[1\\].day", "dates[1][1]")
-                    .replaceAll("map_flags", "flags")
-                    .replaceAll("test_maps", "lineitem_ex")
-                    .replaceAll("cardinality", "array_length");
+            String cte = WITH_LINEITEM_EX + ", test_file_format_orc AS " +
+                    "(SELECT\n" +
+                    "    linenumber,\n" +
+                    "    orderkey,\n" +
+                    "    partkey,\n" +
+                    "    suppkey,\n" +
+                    "    quantity,\n" +
+                    "    extendedprice,\n" +
+                    "    tax,\n" +
+                    "    shipinstruct,\n" +
+                    "    shipmode,\n" +
+                    "    ship_by_air,\n" +
+                    "    is_returned,\n" +
+                    "    ship_day,\n" +
+                    "    ship_month,\n" +
+                    "    ship_timestamp,\n" +
+                    "    commit_timestamp,\n" +
+                    "    discount_real,\n" +
+                    "    discount,\n" +
+                    "    tax_real,\n" +
+                    "    ship_day_month,\n" +
+                    "    discount_long_decimal,\n" +
+                    "    tax_short_decimal,\n" +
+                    "    long_decimals,\n" +
+                    "    keys,\n" +
+                    "    doubles,\n" +
+                    "    nested_keys,\n" +
+                    "    flags,\n" +
+                    "    reals,\n" +
+                    "    info,\n" +
+                    "    dates,\n" +
+                    "    timestamps,\n" +
+                    "    comment,\n" +
+                    "    uppercase_comment,\n" +
+                    "    fixed_comment,\n" +
+                    "    char_array,\n" +
+                    "    varchar_array,\n" +
+                    "    '2019-11-01' AS ds\n" +
+                    "FROM lineitem_ex)";
 
             // no filter
             assertQueryUsingH2Cte("SELECT * FROM test_file_format_orc", cte);
@@ -920,7 +951,7 @@ public class TestHivePushdownFilterQueries
 
             assertQueryUsingH2Cte("SELECT keys FROM test_file_format_orc WHERE keys IS NOT NULL", cte);
             assertQueryUsingH2Cte("SELECT keys FROM test_file_format_orc WHERE keys IS NULL", cte);
-            assertQueryUsingH2Cte("SELECT linenumber FROM test_file_format_orc WHERE keys[1] % 5 = 0 AND keys[2] > 100", cte, rewriter);
+            assertQueryUsingH2Cte("SELECT linenumber FROM test_file_format_orc WHERE keys[1] % 5 = 0 AND keys[2] > 100", cte);
 
             assertQueryUsingH2Cte("SELECT * FROM test_file_format_orc WHERE is_returned=false", cte);
             assertQueryUsingH2Cte("SELECT * FROM test_file_format_orc WHERE is_returned is NULL", cte);
@@ -930,6 +961,9 @@ public class TestHivePushdownFilterQueries
             assertQueryUsingH2Cte("SELECT discount_long_decimal FROM test_file_format_orc WHERE discount_long_decimal > 0.05", cte);
             assertQueryUsingH2Cte("SELECT tax_short_decimal FROM test_file_format_orc WHERE tax_short_decimal < 0.03", cte);
             assertQueryUsingH2Cte("SELECT discount_long_decimal FROM test_file_format_orc WHERE discount_long_decimal > 0.01 AND tax_short_decimal > 0.01 AND (discount_long_decimal + tax_short_decimal) < 0.03", cte);
+
+            Function<String, String> rewriter = query -> query.replaceAll("info.orderkey", "info[1]")
+                    .replaceAll("dates\\[1\\].day", "dates[1][1]");
 
             assertQueryUsingH2Cte("SELECT dates FROM test_file_format_orc WHERE dates[1].day % 2 = 0", cte, rewriter);
             assertQueryUsingH2Cte("SELECT info.orderkey, dates FROM test_file_format_orc WHERE info IS NOT NULL AND dates IS NOT NULL AND info.orderkey % 7 = 0", cte, rewriter);
@@ -953,7 +987,7 @@ public class TestHivePushdownFilterQueries
 
     private void assertQueryUsingH2Cte(String query, String cte)
     {
-        assertQuery(query, cte + " " + query);
+        assertQueryUsingH2Cte(query, cte, Function.identity());
     }
 
     private void assertQueryUsingH2Cte(String query, String cte, Function<String, String> rewriter)
