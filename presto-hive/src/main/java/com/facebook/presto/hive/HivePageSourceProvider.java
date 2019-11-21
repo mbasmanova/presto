@@ -29,8 +29,10 @@ import com.facebook.presto.spi.Subfield;
 import com.facebook.presto.spi.connector.ConnectorPageSourceProvider;
 import com.facebook.presto.spi.connector.ConnectorTransactionHandle;
 import com.facebook.presto.spi.predicate.TupleDomain;
+import com.facebook.presto.spi.relation.InputReferenceExpression;
 import com.facebook.presto.spi.relation.RowExpression;
 import com.facebook.presto.spi.relation.RowExpressionService;
+import com.facebook.presto.spi.relation.VariableReferenceExpression;
 import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.spi.type.TypeManager;
 import com.google.common.collect.ImmutableList;
@@ -49,7 +51,9 @@ import java.util.OptionalInt;
 import java.util.Properties;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.IntStream;
 
+import static com.facebook.presto.expressions.RowExpressionNodeInliner.replaceExpression;
 import static com.facebook.presto.hive.HiveCoercer.createCoercer;
 import static com.facebook.presto.hive.HiveColumnHandle.ColumnType.PARTITION_KEY;
 import static com.facebook.presto.hive.HiveColumnHandle.ColumnType.REGULAR;
@@ -205,7 +209,11 @@ public class HivePageSourceProvider
                 .map(HiveColumnHandle::getHiveColumnIndex)
                 .collect(toImmutableList());
 
-        RowExpression optimizedRemainingPredicate = rowExpressionService.getExpressionOptimizer().optimize(layout.getRemainingPredicate(), OPTIMIZED, session);
+        Map<VariableReferenceExpression, InputReferenceExpression> variableToInput = IntStream.range(0, columnMappings.size())
+                .boxed()
+                .collect(toImmutableMap(i -> toVariableReference(columnMappings.get(i), typeManager), i -> toInputReference(i, columnMappings.get(i), typeManager)));
+
+        RowExpression optimizedRemainingPredicate = replaceExpression(rowExpressionService.getExpressionOptimizer().optimize(layout.getRemainingPredicate(), OPTIMIZED, session), variableToInput);
 
         for (HiveSelectivePageSourceFactory pageSourceFactory : selectivePageSourceFactories) {
             Optional<? extends ConnectorPageSource> pageSource = pageSourceFactory.createPageSource(
@@ -231,6 +239,18 @@ public class HivePageSourceProvider
         }
 
         return Optional.empty();
+    }
+
+    private static VariableReferenceExpression toVariableReference(ColumnMapping columnMapping, TypeManager typeManager)
+    {
+        HiveColumnHandle columnHandle = columnMapping.getHiveColumnHandle();
+        return new VariableReferenceExpression(columnHandle.getName(), typeManager.getType(columnHandle.getTypeSignature()));
+    }
+
+    private static InputReferenceExpression toInputReference(int field, ColumnMapping columnMapping, TypeManager typeManager)
+    {
+        HiveColumnHandle columnHandle = columnMapping.getHiveColumnHandle();
+        return new InputReferenceExpression(field, typeManager.getType(columnHandle.getTypeSignature()));
     }
 
     public static Optional<ConnectorPageSource> createHivePageSource(

@@ -93,7 +93,6 @@ import java.util.stream.IntStream;
 import static com.facebook.presto.expressions.LogicalRowExpressions.TRUE_CONSTANT;
 import static com.facebook.presto.expressions.LogicalRowExpressions.binaryExpression;
 import static com.facebook.presto.expressions.LogicalRowExpressions.extractConjuncts;
-import static com.facebook.presto.expressions.RowExpressionNodeInliner.replaceExpression;
 import static com.facebook.presto.hive.HiveBucketing.getHiveBucket;
 import static com.facebook.presto.hive.HiveColumnHandle.ColumnType.REGULAR;
 import static com.facebook.presto.hive.HiveErrorCode.HIVE_CANNOT_OPEN_SPLIT;
@@ -339,11 +338,6 @@ public class OrcSelectivePageSourceFactory
                     .boxed()
                     .collect(toImmutableBiMap(i -> physicalColumns.get(i).getHiveColumnIndex(), Function.identity()));
 
-            Map<VariableReferenceExpression, InputReferenceExpression> variableToInput = columnNames.keySet().stream()
-                    .collect(toImmutableMap(
-                            hiveColumnIndex -> new VariableReferenceExpression(columnNames.get(hiveColumnIndex), columnTypes.get(hiveColumnIndex)),
-                            hiveColumnIndex -> new InputReferenceExpression(inputs.get(hiveColumnIndex), columnTypes.get(hiveColumnIndex))));
-
             Optional<BucketAdapter> bucketAdapter = bucketAdaptation.map(adaptation -> new BucketAdapter(
                     Arrays.stream(adaptation.getBucketColumnIndices())
                             .map(indexMapping::get)
@@ -354,7 +348,7 @@ public class OrcSelectivePageSourceFactory
                     adaptation.getPartitionBucketCount(),
                     adaptation.getBucketToKeep()));
 
-            List<FilterFunction> filterFunctions = toFilterFunctions(replaceExpression(remainingPredicate, variableToInput), bucketAdapter, session, rowExpressionService.getDeterminismEvaluator(), rowExpressionService.getPredicateCompiler());
+            List<FilterFunction> filterFunctions = toFilterFunctions(remainingPredicate, bucketAdapter, session, rowExpressionService.getDeterminismEvaluator(), rowExpressionService.getPredicateCompiler());
 
             OrcSelectiveRecordReader recordReader = reader.createSelectiveRecordReader(
                     columnTypes,
