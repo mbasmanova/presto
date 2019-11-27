@@ -178,6 +178,15 @@ public class TestRowExpressionDomainTranslator
     }
 
     @Test
+    public void test()
+    {
+        RowExpression rowExpression = or(or(equal(C_BOOLEAN, constant(true, BOOLEAN)), equal(C_BOOLEAN, constant(false, BOOLEAN))), isNull(C_BOOLEAN));
+        ExtractionResult result = fromPredicate(rowExpression);
+        TupleDomain tupleDomain = result.getTupleDomain();
+        assertTrue(tupleDomain.isAll());
+    }
+
+    @Test
     public void testInOptimization()
     {
         Domain testDomain = Domain.create(

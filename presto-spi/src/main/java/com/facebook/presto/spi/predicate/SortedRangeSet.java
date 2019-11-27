@@ -14,6 +14,7 @@
 package com.facebook.presto.spi.predicate;
 
 import com.facebook.presto.spi.ConnectorSession;
+import com.facebook.presto.spi.type.BooleanType;
 import com.facebook.presto.spi.type.Type;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -32,6 +33,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+import static com.facebook.presto.spi.type.BooleanType.BOOLEAN;
 import static java.util.Objects.requireNonNull;
 
 /**
@@ -417,6 +419,25 @@ public final class SortedRangeSet
 
             if (current != null) {
                 result.put(current.getLow(), current);
+            }
+
+            if (type == BooleanType.BOOLEAN) {
+                boolean trueAllowed = false;
+                boolean falseAllowed = false;
+                for (Map.Entry<Marker, Range> entry : result.entrySet()) {
+                    if (entry.getValue().includes(Marker.exactly(BOOLEAN, true))) {
+                        trueAllowed = true;
+                    }
+                    if (entry.getValue().includes(Marker.exactly(BOOLEAN, false))) {
+                        falseAllowed = true;
+                    }
+                }
+
+                if (trueAllowed && falseAllowed) {
+                    result = new TreeMap<>();
+                    result.put(Range.all(BOOLEAN).getLow(), Range.all(BOOLEAN));
+                    return new SortedRangeSet(BOOLEAN, result);
+                }
             }
 
             return new SortedRangeSet(type, result);
