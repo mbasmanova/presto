@@ -159,6 +159,7 @@ public class OrcSelectiveRecordReader
             StripeMetadataSource stripeMetadataSource)
     {
         super(includedColumns,
+                requiredSubfields,
                 createStreamReaders(
                         orcDataSource,
                         types,
