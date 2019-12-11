@@ -1204,24 +1204,14 @@ public interface TupleDomainFilter
         private final TupleDomainFilter[] filters;
         private boolean nanAllowed;
 
-        private MultiRange(List<TupleDomainFilter> filters, boolean nullAllowed)
+        private MultiRange(List<TupleDomainFilter> filters, boolean nullAllowed, boolean nanAllowed)
         {
             super(true, nullAllowed);
             requireNonNull(filters, "filters is null");
             checkArgument(filters.size() > 1, "filters must contain at least 2 entries");
 
             this.filters = filters.toArray(new TupleDomainFilter[0]);
-        }
-
-        private MultiRange(List<TupleDomainFilter> filters, boolean nullAllowed, boolean nanAllowed)
-        {
-            this(filters, nullAllowed);
             this.nanAllowed = nanAllowed;
-        }
-
-        public static MultiRange of(List<TupleDomainFilter> filters, boolean nullAllowed)
-        {
-            return new MultiRange(filters, nullAllowed);
         }
 
         public static MultiRange of(List<TupleDomainFilter> filters, boolean nullAllowed, boolean nanAllowed)
@@ -1229,12 +1219,14 @@ public interface TupleDomainFilter
             return new MultiRange(filters, nullAllowed, nanAllowed);
         }
 
-
         @Override
         public boolean testDouble(double value)
         {
+            if (Double.isNaN(value)) {
+                return nanAllowed;
+            }
             for (TupleDomainFilter filter : filters) {
-                if ((nanAllowed && Double.isNaN(value)) || filter.testDouble(value)) {
+                if (filter.testDouble(value)) {
                     return true;
                 }
             }
@@ -1244,8 +1236,11 @@ public interface TupleDomainFilter
         @Override
         public boolean testFloat(float value)
         {
+            if (Float.isNaN(value)) {
+                return nanAllowed;
+            }
             for (TupleDomainFilter filter : filters) {
-                if ((nanAllowed && Float.isNaN(value)) || filter.testFloat(value)) {
+                if (filter.testFloat(value)) {
                     return true;
                 }
             }

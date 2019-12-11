@@ -273,7 +273,7 @@ public class TestTupleDomainFilterUtils
         assertEquals(toFilter(in(C_DOUBLE, ImmutableList.of(1.2, 3.4, 5.6))), MultiRange.of(ImmutableList.of(
                 DoubleRange.of(1.2, false, false, 1.2, false, false, false),
                 DoubleRange.of(3.4, false, false, 3.4, false, false, false),
-                DoubleRange.of(5.6, false, false, 5.6, false, false, false)), false));
+                DoubleRange.of(5.6, false, false, 5.6, false, false, false)), false, false));
 
         assertEquals(toFilter(isDistinctFrom(C_DOUBLE, doubleLiteral(1.2))), MultiRange.of(ImmutableList.of(
                 DoubleRange.of(Double.MIN_VALUE, true, true, 1.2, false, true, false),
@@ -337,12 +337,12 @@ public class TestTupleDomainFilterUtils
         assertEquals(toFilter(equal(C_DECIMAL_21_3, decimalLiteral)), LongDecimalRange.of(decimal.getLong(0), decimal.getLong(SIZE_OF_LONG), false, false, decimal.getLong(0), decimal.getLong(SIZE_OF_LONG), false, false, false));
         assertEquals(toFilter(not(equal(C_DECIMAL_21_3, decimalLiteral))), MultiRange.of(ImmutableList.of(
                 LongDecimalRange.of(Long.MIN_VALUE, Long.MIN_VALUE, true, true, decimal.getLong(0), decimal.getLong(SIZE_OF_LONG), false, true, false),
-                LongDecimalRange.of(decimal.getLong(0), decimal.getLong(SIZE_OF_LONG), false, true, Long.MAX_VALUE, Long.MAX_VALUE, true, true, false)), false));
+                LongDecimalRange.of(decimal.getLong(0), decimal.getLong(SIZE_OF_LONG), false, true, Long.MAX_VALUE, Long.MAX_VALUE, true, true, false)), false, false));
 
         assertEquals(toFilter(or(isNull(C_DECIMAL_21_3), equal(C_DECIMAL_21_3, decimalLiteral))), LongDecimalRange.of(decimal.getLong(0), decimal.getLong(SIZE_OF_LONG), false, false, decimal.getLong(0), decimal.getLong(SIZE_OF_LONG), false, false, true));
         assertEquals(toFilter(or(isNull(C_DECIMAL_21_3), not(equal(C_DECIMAL_21_3, decimalLiteral)))), MultiRange.of(ImmutableList.of(
                 LongDecimalRange.of(Long.MIN_VALUE, Long.MIN_VALUE, true, true, decimal.getLong(0), decimal.getLong(SIZE_OF_LONG), false, true, false),
-                LongDecimalRange.of(decimal.getLong(0), decimal.getLong(SIZE_OF_LONG), false, true, Long.MAX_VALUE, Long.MAX_VALUE, true, true, false)), true));
+                LongDecimalRange.of(decimal.getLong(0), decimal.getLong(SIZE_OF_LONG), false, true, Long.MAX_VALUE, Long.MAX_VALUE, true, true, false)), true, false));
     }
 
     @Test
@@ -351,7 +351,7 @@ public class TestTupleDomainFilterUtils
         assertEquals(toFilter(equal(C_VARCHAR, stringLiteral("abc", VARCHAR))), BytesRange.of(toBytes("abc"), false, toBytes("abc"), false, false));
         assertEquals(toFilter(not(equal(C_VARCHAR, stringLiteral("abc", VARCHAR)))), MultiRange.of(ImmutableList.of(
                 BytesRange.of(null, true, toBytes("abc"), true, false),
-                BytesRange.of(toBytes("abc"), true, null, true, false)), false));
+                BytesRange.of(toBytes("abc"), true, null, true, false)), false, false));
 
         assertEquals(toFilter(lessThan(C_VARCHAR, stringLiteral("abc", VARCHAR))), BytesRange.of(null, true, toBytes("abc"), true, false));
         assertEquals(toFilter(lessThanOrEqual(C_VARCHAR, stringLiteral("abc", VARCHAR))), BytesRange.of(null, true, toBytes("abc"), false, false));
