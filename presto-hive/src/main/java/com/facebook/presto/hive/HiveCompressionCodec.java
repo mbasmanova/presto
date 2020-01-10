@@ -27,7 +27,8 @@ public enum HiveCompressionCodec
 {
     NONE(null, CompressionKind.NONE, CompressionCodecName.UNCOMPRESSED),
     SNAPPY(SnappyCodec.class, CompressionKind.SNAPPY, CompressionCodecName.SNAPPY),
-    GZIP(GzipCodec.class, CompressionKind.ZLIB, CompressionCodecName.GZIP);
+    GZIP(GzipCodec.class, CompressionKind.ZLIB, CompressionCodecName.GZIP),
+    ZSTD(null, CompressionKind.ZSTD, null);
 
     private final Optional<Class<? extends CompressionCodec>> codec;
     private final CompressionKind orcCompressionKind;
@@ -37,7 +38,8 @@ public enum HiveCompressionCodec
     {
         this.codec = Optional.ofNullable(codec);
         this.orcCompressionKind = requireNonNull(orcCompressionKind, "orcCompressionKind is null");
-        this.parquetCompressionCodec = requireNonNull(parquetCompressionCodec, "parquetCompressionCodec is null");
+//        this.parquetCompressionCodec = requireNonNull(parquetCompressionCodec, "parquetCompressionCodec is null");
+        this.parquetCompressionCodec = parquetCompressionCodec;
     }
 
     public Optional<Class<? extends CompressionCodec>> getCodec()
