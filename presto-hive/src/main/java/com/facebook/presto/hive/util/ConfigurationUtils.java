@@ -19,7 +19,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.ql.io.orc.OrcFile;
 import org.apache.hadoop.mapred.JobConf;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import parquet.hadoop.ParquetOutputFormat;
 
 import java.util.Map;
 
@@ -113,7 +112,7 @@ public final class ConfigurationUtils
             config.unset(FileOutputFormat.COMPRESS_CODEC);
         }
         // For Parquet
-        config.set(ParquetOutputFormat.COMPRESSION, compression.getParquetCompressionCodec().name());
+//        config.set(ParquetOutputFormat.COMPRESSION, compression.getParquetCompressionCodec().name());
         // For SequenceFile
         config.set(FileOutputFormat.COMPRESS_TYPE, BLOCK.toString());
     }
