@@ -241,6 +241,9 @@ public class OrcReader
 
     private static OrcDataSource wrapWithCacheIfTiny(OrcDataSource dataSource, DataSize maxCacheSize)
     {
+        if (dataSource.useCache()) {
+            return dataSource;
+        }
         if (dataSource instanceof CachingOrcDataSource) {
             return dataSource;
         }

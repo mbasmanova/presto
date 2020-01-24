@@ -36,6 +36,7 @@ import com.google.common.io.Closer;
 import io.airlift.slice.Slice;
 import io.airlift.slice.Slices;
 import io.airlift.units.DataSize;
+import it.unimi.dsi.fastutil.ints.IntArrayList;
 import org.joda.time.DateTimeZone;
 import org.openjdk.jol.info.ClassLayout;
 
@@ -287,6 +288,9 @@ abstract class AbstractOrcRecordReader<T extends StreamReader>
     @VisibleForTesting
     static OrcDataSource wrapWithCacheIfTinyStripes(OrcDataSource dataSource, List<StripeInformation> stripes, DataSize maxMergeDistance, DataSize tinyStripeThreshold)
     {
+        if (dataSource.useCache()) {
+            return dataSource;
+        }
         if (dataSource instanceof CachingOrcDataSource) {
             return dataSource;
         }
@@ -685,7 +689,7 @@ abstract class AbstractOrcRecordReader<T extends StreamReader>
             List<DiskRange> scratchDiskRanges = stripes.stream()
                     .map(stripe -> new DiskRange(stripe.getOffset(), toIntExact(stripe.getTotalLength())))
                     .collect(Collectors.toList());
-            List<DiskRange> diskRanges = mergeAdjacentDiskRanges(scratchDiskRanges, maxMergeDistance, tinyStripeThreshold);
+            List<DiskRange> diskRanges = mergeAdjacentDiskRanges(scratchDiskRanges, maxMergeDistance, tinyStripeThreshold, new IntArrayList());
 
             return new OrcBatchRecordReader.LinearProbeRangeFinder(diskRanges);
         }
