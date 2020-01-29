@@ -726,7 +726,7 @@ public class FileCache
                             entry.numMerged = numMerged;
                             entry.isPrefetch = false;
                         }
-                        else if (numMerged <= 1) {
+                        else if (entry.numMerged <= 1) {
                             countAsHit = true;
                         }
                         else {

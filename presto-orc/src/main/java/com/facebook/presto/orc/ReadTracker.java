@@ -57,12 +57,13 @@ class ReadTracker
 
     public boolean needsPrefetch(StreamId streamId)
     {
-        long count = readCounts.get(streamId);
-        int numStreams = readOrder.size();
-        if (numStreams == 0) {
-            return false;
-        }
-        return count > (totalReads / numStreams) / 2;
+        return true;
+//        long count = readCounts.get(streamId);
+//        int numStreams = readOrder.size();
+//        if (numStreams == 0) {
+//            return false;
+//        }
+//        return count > (totalReads / numStreams) / 2;
     }
 
     public void schedulePrefetch(Map<StreamId, DiskRange> ranges, OrcDataSource dataSource)

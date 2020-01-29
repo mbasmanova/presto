@@ -88,7 +88,7 @@ public class CachingStripeMetadataSource
         }
 
         // read ranges and update cache
-        Map<StreamId, OrcDataSourceInput> uncachedInputs = delegate.getInputs(orcDataSource, stripeId, uncachedDiskRangesBuilder.build());
+        Map<StreamId, OrcDataSourceInput> uncachedInputs = delegate.getInputs(orcDataSource, stripeId, uncachedDiskRangesBuilder.build(), tracker);
         for (Entry<StreamId, OrcDataSourceInput> entry : uncachedInputs.entrySet()) {
             if (isCachedStream(entry.getKey().getStreamKind())) {
                 // We need to rewind the input after eagerly reading the slice.

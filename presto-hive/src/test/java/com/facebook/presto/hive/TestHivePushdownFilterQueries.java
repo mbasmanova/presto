@@ -149,7 +149,9 @@ public class TestHivePushdownFilterQueries
         Session cache = Session.builder(getSession())
                 .setCatalogSessionProperty("hive", "block_cache_enabled", "true")
                 .build();
-        assertQuery("SELECT sum(quantity) FROM lineitem");
+        assertQuerySucceeds(cache, "SELECT sum(quantity) FROM lineitem_sf100");
+
+        assertQuerySucceeds(cache, "SELECT sum(quantity) FROM lineitem_sf100");
     }
 
     @Test

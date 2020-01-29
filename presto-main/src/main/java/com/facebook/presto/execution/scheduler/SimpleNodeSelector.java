@@ -27,6 +27,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Multimap;
 import com.google.common.util.concurrent.ListenableFuture;
 
+import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +64,8 @@ public class SimpleNodeSelector
     private final int maxPendingSplitsPerTask;
     private final int maxTasksPerStage;
     private final boolean useAffinity;
+    private Collection<InternalNode> unsortedNodes;
+    private List<InternalNode> sortedNodes;
 
     public SimpleNodeSelector(
             InternalNodeManager nodeManager,
@@ -117,11 +121,15 @@ public class SimpleNodeSelector
         NodeMap nodeMap = this.nodeMap.get().get();
         NodeAssignmentStats assignmentStats = new NodeAssignmentStats(nodeTaskMap, nodeMap, existingTasks);
         ResettableRandomizedIterator<InternalNode> randomCandidates = getRandomCandidates(maxTasksPerStage, nodeMap, existingTasks);
-        List<InternalNode> nodesForAffinity = null;
         if (useAffinity) {
-            nodesForAffinity = nodeMap.getNodesByHostAndPort().values().stream()
-                .filter(node -> includeCoordinator || !nodeMap.getCoordinatorNodeIds().contains(node.getNodeIdentifier()))
-                .collect(toImmutableList());
+            if (sortedNodes == null || nodeMap.getNodesByHostAndPort().values() != unsortedNodes) {
+                unsortedNodes = nodeMap.getNodesByHostAndPort().values();
+
+                sortedNodes = unsortedNodes.stream()
+                        .filter(node -> includeCoordinator || !nodeMap.getCoordinatorNodeIds().contains(node.getNodeIdentifier()))
+                        .sorted(Comparator.comparing(InternalNode::getHost))
+                        .collect(toImmutableList());
+            }
         }
         Set<InternalNode> blockedExactNodes = new HashSet<>();
         boolean splitWaitingForAnyNode = false;
@@ -133,7 +141,7 @@ public class SimpleNodeSelector
                 candidateNodes = selectExactNodes(nodeMap, split.getAddresses(), includeCoordinator);
             }
             else if (useAffinity) {
-                candidateNodes = selectAffinityNodesForSplit(nodesForAffinity, split, minCandidates, randomCandidates);
+                candidateNodes = selectAffinityNodesForSplit(sortedNodes, split, minCandidates, randomCandidates);
             }
             else {
                 candidateNodes = selectNodes(minCandidates, randomCandidates);
