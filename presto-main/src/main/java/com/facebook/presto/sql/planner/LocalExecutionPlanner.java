@@ -16,6 +16,7 @@ package com.facebook.presto.sql.planner;
 import com.facebook.airlift.json.JsonCodec;
 import com.facebook.presto.Session;
 import com.facebook.presto.SystemSessionProperties;
+import com.facebook.presto.array.DoubleBigArray;
 import com.facebook.presto.execution.ExplainAnalyzeContext;
 import com.facebook.presto.execution.StageExecutionId;
 import com.facebook.presto.execution.TaskManagerConfig;
@@ -39,6 +40,7 @@ import com.facebook.presto.operator.DriverFactory;
 import com.facebook.presto.operator.EnforceSingleRowOperator;
 import com.facebook.presto.operator.ExplainAnalyzeOperator.ExplainAnalyzeOperatorFactory;
 import com.facebook.presto.operator.FilterAndProjectOperator;
+import com.facebook.presto.operator.GroupByIdBlock;
 import com.facebook.presto.operator.GroupIdOperator;
 import com.facebook.presto.operator.HashAggregationOperator.HashAggregationOperatorFactory;
 import com.facebook.presto.operator.HashBuilderOperator.HashBuilderOperatorFactory;
@@ -85,7 +87,9 @@ import com.facebook.presto.operator.TopNRowNumberOperator;
 import com.facebook.presto.operator.ValuesOperator.ValuesOperatorFactory;
 import com.facebook.presto.operator.WindowFunctionDefinition;
 import com.facebook.presto.operator.WindowOperator.WindowOperatorFactory;
+import com.facebook.presto.operator.aggregation.Accumulator;
 import com.facebook.presto.operator.aggregation.AccumulatorFactory;
+import com.facebook.presto.operator.aggregation.GroupedAccumulator;
 import com.facebook.presto.operator.aggregation.InternalAggregationFunction;
 import com.facebook.presto.operator.aggregation.LambdaProvider;
 import com.facebook.presto.operator.exchange.LocalExchange.LocalExchangeFactory;
@@ -113,6 +117,8 @@ import com.facebook.presto.spi.PageBuilder;
 import com.facebook.presto.spi.PrestoException;
 import com.facebook.presto.spi.RecordSet;
 import com.facebook.presto.spi.TableHandle;
+import com.facebook.presto.spi.block.Block;
+import com.facebook.presto.spi.block.BlockBuilder;
 import com.facebook.presto.spi.block.BlockEncodingSerde;
 import com.facebook.presto.spi.block.SortOrder;
 import com.facebook.presto.spi.function.FunctionHandle;
@@ -120,6 +126,7 @@ import com.facebook.presto.spi.function.FunctionMetadata;
 import com.facebook.presto.spi.function.OperatorType;
 import com.facebook.presto.spi.function.QualifiedFunctionName;
 import com.facebook.presto.spi.function.SqlFunctionProperties;
+import com.facebook.presto.spi.function.WindowIndex;
 import com.facebook.presto.spi.plan.AggregationNode;
 import com.facebook.presto.spi.plan.AggregationNode.Aggregation;
 import com.facebook.presto.spi.plan.AggregationNode.Step;
@@ -232,6 +239,7 @@ import static com.facebook.presto.SystemSessionProperties.isOptimizedRepartition
 import static com.facebook.presto.SystemSessionProperties.isSpillEnabled;
 import static com.facebook.presto.expressions.LogicalRowExpressions.TRUE_CONSTANT;
 import static com.facebook.presto.expressions.RowExpressionNodeInliner.replaceExpression;
+import static com.facebook.presto.metadata.BuiltInFunctionNamespaceManager.DEFAULT_NAMESPACE;
 import static com.facebook.presto.operator.DistinctLimitOperator.DistinctLimitOperatorFactory;
 import static com.facebook.presto.operator.NestedLoopBuildOperator.NestedLoopBuildOperatorFactory;
 import static com.facebook.presto.operator.NestedLoopJoinOperator.NestedLoopJoinOperatorFactory;
@@ -252,6 +260,7 @@ import static com.facebook.presto.spi.plan.AggregationNode.Step.INTERMEDIATE;
 import static com.facebook.presto.spi.plan.AggregationNode.Step.PARTIAL;
 import static com.facebook.presto.spi.relation.ExpressionOptimizer.Level.OPTIMIZED;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
+import static com.facebook.presto.spi.type.DoubleType.DOUBLE;
 import static com.facebook.presto.spi.type.TypeUtils.writeNativeValue;
 import static com.facebook.presto.sql.gen.LambdaBytecodeGenerator.compileLambdaProvider;
 import static com.facebook.presto.sql.planner.RowExpressionInterpreter.rowExpressionInterpreter;
@@ -291,6 +300,8 @@ import static java.util.stream.IntStream.range;
 
 public class LocalExecutionPlanner
 {
+    private static final QualifiedFunctionName SUM_AGGREGATE_FUNCTION = QualifiedFunctionName.of(DEFAULT_NAMESPACE, "sum");
+
     private final Metadata metadata;
     private final Optional<ExplainAnalyzeContext> explainAnalyzeContext;
     private final PageSourceProvider pageSourceProvider;
@@ -2759,6 +2770,12 @@ public class LocalExecutionPlanner
         {
             List<VariableReferenceExpression> aggregationOutputVariables = new ArrayList<>();
             List<AccumulatorFactory> accumulatorFactories = new ArrayList<>();
+
+            // special case for partial SUM aggregations
+            if (PARTIAL.equals(step) && aggregations.values().stream().allMatch(this::isSimpleSum)) {
+//                accumulatorFactories.add(new MultiDoubleSumAccumulatorFactory(aggregations, source.getLayout()));
+            }
+
             for (Map.Entry<VariableReferenceExpression, Aggregation> entry : aggregations.entrySet()) {
                 VariableReferenceExpression variable = entry.getKey();
                 Aggregation aggregation = entry.getValue();
@@ -2825,6 +2842,225 @@ public class LocalExecutionPlanner
                         spillerFactory,
                         joinCompiler,
                         useSystemMemory);
+            }
+        }
+
+        private boolean isSimpleSum(Aggregation aggregation)
+        {
+            return !aggregation.getFilter().isPresent() &&
+                    !aggregation.getOrderBy().isPresent() &&
+                    !aggregation.isDistinct() &&
+                    !aggregation.getMask().isPresent() &&
+                    SUM_AGGREGATE_FUNCTION.equals(metadata.getFunctionManager().getFunctionMetadata(aggregation.getCall().getFunctionHandle()).getName());
+        }
+    }
+
+    private static final class MultiDoubleSumAccumulatorFactory
+            implements AccumulatorFactory
+    {
+        private final List<Integer> inputChannels;
+
+        public MultiDoubleSumAccumulatorFactory(Map<VariableReferenceExpression, Aggregation> aggregations, Map<VariableReferenceExpression, Integer> layout)
+        {
+            ImmutableList.Builder<Integer> inputChannels = ImmutableList.builder();
+            for (Aggregation aggregation : aggregations.values()) {
+                verify(aggregation.getArguments().size() == 1);
+                RowExpression argument = aggregation.getArguments().get(0);
+                checkArgument(argument instanceof VariableReferenceExpression, "argument must be variable reference");
+                inputChannels.add(layout.get(argument));
+            }
+
+            this.inputChannels = inputChannels.build();
+        }
+
+        @Override
+        public List<Integer> getInputChannels()
+        {
+            return inputChannels;
+        }
+
+        @Override
+        public Accumulator createAccumulator()
+        {
+            return new MultiDoubleSumAccumulator(inputChannels);
+        }
+
+        @Override
+        public Accumulator createIntermediateAccumulator()
+        {
+            throw new UnsupportedOperationException("createIntermediateAccumulator is not supported for partial sum");
+        }
+
+        @Override
+        public GroupedAccumulator createGroupedAccumulator()
+        {
+            // TODO Implement
+            return null;
+        }
+
+        @Override
+        public GroupedAccumulator createGroupedIntermediateAccumulator()
+        {
+            throw new UnsupportedOperationException("createGroupedIntermediateAccumulator is not supported for partial sum");
+        }
+
+        @Override
+        public boolean hasOrderBy()
+        {
+            return false;
+        }
+
+        @Override
+        public boolean hasDistinct()
+        {
+            return false;
+        }
+
+        private static final class MultiDoubleSumAccumulator
+                implements Accumulator
+        {
+            private final List<Integer> inputChannels;
+            private final double[] sums;
+
+            private MultiDoubleSumAccumulator(List<Integer> inputChannels)
+            {
+                this.inputChannels = inputChannels;
+                this.sums = new double[inputChannels.size()];
+            }
+
+            @Override
+            public long getEstimatedSize()
+            {
+                return 0;
+            }
+
+            @Override
+            public Type getFinalType()
+            {
+                return DOUBLE;
+            }
+
+            @Override
+            public Type getIntermediateType()
+            {
+                return DOUBLE;
+            }
+
+            @Override
+            public void addInput(Page page)
+            {
+                int positionCount = page.getPositionCount();
+
+                for (int i = 0; i < inputChannels.size(); i++) {
+                    Block block = page.getBlock(i);
+                    for (int position = 0; position < positionCount; i++) {
+                        if (!block.isNullUnchecked(position)) {
+                            sums[i] += DOUBLE.getDouble(block, position);
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void addInput(WindowIndex index, List<Integer> channels, int startPosition, int endPosition)
+            {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public void addIntermediate(Block block)
+            {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public void evaluateIntermediate(BlockBuilder blockBuilder)
+            {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public void evaluateFinal(BlockBuilder blockBuilder)
+            {
+                for (int i = 0; i < inputChannels.size(); i++) {
+                    DOUBLE.writeDouble(blockBuilder, sums[i]);
+                }
+            }
+        }
+
+        private static final class MultiDoubleSumGroupedAccumulator
+                implements GroupedAccumulator
+        {
+            private final List<Integer> inputChannels;
+            private final DoubleBigArray[] sums;
+
+            private MultiDoubleSumGroupedAccumulator(List<Integer> inputChannels)
+            {
+                this.inputChannels = inputChannels;
+                this.sums = new DoubleBigArray[inputChannels.size()];
+                for (int i = 0; i < inputChannels.size(); i++) {
+                    sums[i] = new DoubleBigArray(10_000); // TODO Do not hardcode initial capacity
+                }
+            }
+
+            @Override
+            public long getEstimatedSize()
+            {
+                return 0;
+            }
+
+            @Override
+            public Type getFinalType()
+            {
+                return DOUBLE;
+            }
+
+            @Override
+            public Type getIntermediateType()
+            {
+                return DOUBLE;
+            }
+
+            @Override
+            public void addInput(GroupByIdBlock groupIdsBlock, Page page)
+            {
+                int positionCount = page.getPositionCount();
+
+                for (int i = 0; i < inputChannels.size(); i++) {
+                    sums[i].ensureCapacity(groupIdsBlock.getGroupCount());
+                    Block block = page.getBlock(i);
+                    for (int position = 0; position < positionCount; position++) {
+                        if (!block.isNull(position) && !groupIdsBlock.isNull(position)) {
+                            sums[i].add(groupIdsBlock.getGroupId(position), DOUBLE.getDouble(block, position));
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void addIntermediate(GroupByIdBlock groupIdsBlock, Block block)
+            {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public void evaluateIntermediate(int groupId, BlockBuilder output)
+            {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public void evaluateFinal(int groupId, BlockBuilder output)
+            {
+                for (int i = 0; i < inputChannels.size(); i++) {
+                    DOUBLE.writeDouble(output, sums[i].get(groupId));
+                }
+            }
+
+            @Override
+            public void prepareFinal()
+            {
+                throw new UnsupportedOperationException();
             }
         }
     }
