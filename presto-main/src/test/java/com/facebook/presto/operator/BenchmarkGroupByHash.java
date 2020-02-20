@@ -15,6 +15,7 @@ package com.facebook.presto.operator;
 
 import com.facebook.presto.array.LongBigArray;
 import com.facebook.presto.metadata.MetadataManager;
+import com.facebook.presto.operator.BigintGroupByHash.SingleGroupByKeyProducer;
 import com.facebook.presto.spi.Page;
 import com.facebook.presto.spi.PageBuilder;
 import com.facebook.presto.spi.block.Block;
@@ -120,7 +121,7 @@ public class BenchmarkGroupByHash
     @OperationsPerInvocation(POSITIONS)
     public Object bigintGroupByHash(SingleChannelBenchmarkData data)
     {
-        GroupByHash groupByHash = new BigintGroupByHash(0, data.getHashEnabled(), EXPECTED_SIZE, NOOP);
+        GroupByHash groupByHash = new BigintGroupByHash(new SingleGroupByKeyProducer(0), data.getHashChannel(), EXPECTED_SIZE, NOOP);
         data.getPages().forEach(p -> groupByHash.addPage(p).process());
 
         ImmutableList.Builder<Page> pages = ImmutableList.builder();
@@ -315,9 +316,9 @@ public class BenchmarkGroupByHash
             return types;
         }
 
-        public boolean getHashEnabled()
+        public Optional<Integer> getHashChannel()
         {
-            return hashEnabled;
+            return hashEnabled ? Optional.of(channelCount) : Optional.empty();
         }
     }
 

@@ -14,6 +14,8 @@
 package com.facebook.presto.operator;
 
 import com.facebook.presto.Session;
+import com.facebook.presto.operator.BigintGroupByHash.MultiGroupByKeyProducer;
+import com.facebook.presto.operator.BigintGroupByHash.SingleGroupByKeyProducer;
 import com.facebook.presto.spi.Page;
 import com.facebook.presto.spi.PageBuilder;
 import com.facebook.presto.spi.type.Type;
@@ -26,6 +28,9 @@ import java.util.Optional;
 import static com.facebook.presto.SystemSessionProperties.isDictionaryAggregationEnabled;
 import static com.facebook.presto.operator.UpdateMemory.NOOP;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
+import static com.facebook.presto.spi.type.IntegerType.INTEGER;
+import static com.facebook.presto.spi.type.SmallintType.SMALLINT;
+import static com.facebook.presto.spi.type.TinyintType.TINYINT;
 
 public interface GroupByHash
 {
@@ -50,8 +55,31 @@ public interface GroupByHash
             UpdateMemory updateMemory)
     {
         if (hashTypes.size() == 1 && hashTypes.get(0).equals(BIGINT) && hashChannels.length == 1) {
-            return new BigintGroupByHash(hashChannels[0], inputHashChannel.isPresent(), expectedSize, updateMemory);
+            return new BigintGroupByHash(new SingleGroupByKeyProducer(hashChannels[0]), inputHashChannel, expectedSize, updateMemory);
         }
+
+        int totalBytes = 0;
+        for (int i = 0; i < hashChannels.length; i++) {
+            Type type = hashTypes.get(i);
+            if (TINYINT == type) {
+                totalBytes += 1;
+            }
+            else if (SMALLINT == type) {
+                totalBytes += 2;
+            }
+            else if (INTEGER == type) {
+                totalBytes += 4;
+            }
+            else {
+                totalBytes = Integer.MAX_VALUE;
+                break;
+            }
+        }
+
+        if (totalBytes <= 8) {
+            return new BigintGroupByHash(new MultiGroupByKeyProducer(hashChannels, hashTypes), inputHashChannel, expectedSize, updateMemory);
+        }
+
         return new MultiChannelGroupByHash(hashTypes, hashChannels, inputHashChannel, expectedSize, processDictionary, joinCompiler, updateMemory);
     }
 

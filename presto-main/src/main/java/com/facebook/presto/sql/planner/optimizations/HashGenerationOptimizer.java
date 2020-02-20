@@ -28,6 +28,7 @@ import com.facebook.presto.spi.relation.CallExpression;
 import com.facebook.presto.spi.relation.RowExpression;
 import com.facebook.presto.spi.relation.SpecialFormExpression;
 import com.facebook.presto.spi.relation.VariableReferenceExpression;
+import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.sql.planner.PartitioningScheme;
 import com.facebook.presto.sql.planner.PlanVariableAllocator;
 import com.facebook.presto.sql.planner.TypeProvider;
@@ -67,6 +68,9 @@ import java.util.Set;
 import java.util.function.Function;
 
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
+import static com.facebook.presto.spi.type.IntegerType.INTEGER;
+import static com.facebook.presto.spi.type.SmallintType.SMALLINT;
+import static com.facebook.presto.spi.type.TinyintType.TINYINT;
 import static com.facebook.presto.sql.planner.SystemPartitioningHandle.FIXED_HASH_DISTRIBUTION;
 import static com.facebook.presto.sql.planner.optimizations.SetOperationNodeUtils.fromListMultimap;
 import static com.facebook.presto.sql.planner.plan.ChildReplacer.replaceChildren;
@@ -188,8 +192,36 @@ public class HashGenerationOptimizer
 
         private boolean canSkipHashGeneration(List<VariableReferenceExpression> partitionVariables)
         {
+            if (partitionVariables.isEmpty()) {
+                return true;
+            }
+
             // HACK: bigint grouped aggregation has special operators that do not use precomputed hash, so we can skip hash generation
-            return partitionVariables.isEmpty() || (partitionVariables.size() == 1 && Iterables.getOnlyElement(partitionVariables).getType().equals(BIGINT));
+            if (partitionVariables.size() == 1 && Iterables.getOnlyElement(partitionVariables).getType().equals(BIGINT)) {
+                return true;
+            }
+
+            // Skip hash generation if group by keys can be combined into a single BIGINT
+            int totalBytes = 0;
+            for (int i = 0; i < partitionVariables.size(); i++) {
+                Type type = partitionVariables.get(i).getType();
+                if (INTEGER == type) {
+                    totalBytes += 4;
+                }
+                else if (SMALLINT == type) {
+                    totalBytes += 2;
+                }
+                else if (TINYINT == type) {
+                    totalBytes += 1;
+                }
+                else {
+                    totalBytes = Integer.MAX_VALUE;
+                    break;
+                }
+            }
+
+            // TODO Allow one bit for null flag for each variable
+            return totalBytes <= 8;
         }
 
         @Override

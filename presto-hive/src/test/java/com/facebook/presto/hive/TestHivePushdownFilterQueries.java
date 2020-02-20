@@ -152,7 +152,13 @@ public class TestHivePushdownFilterQueries
     {
         assertQuery("SELECT linenumber, sum(quantity) FROM lineitem GROUP BY linenumber");
 
+        assertQuery("SELECT -linenumber, sum(quantity) FROM lineitem GROUP BY -linenumber");
+
         assertQuery("SELECT cast(linenumber as tinyint), cast(orderkey as integer), sum(quantity) FROM lineitem GROUP BY cast(linenumber as tinyint), cast(orderkey as integer)");
+
+        assertQuery("SELECT -cast(linenumber as tinyint), cast(orderkey as integer), sum(quantity) FROM lineitem GROUP BY -cast(linenumber as tinyint), cast(orderkey as integer)");
+
+        assertQuery("SELECT cast(linenumber as tinyint), -cast(orderkey as integer), sum(quantity) FROM lineitem GROUP BY cast(linenumber as tinyint), -cast(orderkey as integer)");
     }
 
     @Test
