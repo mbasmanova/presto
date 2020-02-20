@@ -397,6 +397,7 @@ public class StateCompiler
                 .push(groupedStateClass)
                 .retObject();
 
+//        System.out.println(BytecodeUtils.dumpBytecodeTree(definition));
         Class<? extends AccumulatorStateFactory> factoryClass = defineClass(definition, AccumulatorStateFactory.class, classLoader);
         try {
             return (AccumulatorStateFactory<T>) factoryClass.getConstructor().newInstance();
@@ -438,6 +439,7 @@ public class StateCompiler
         constructor.getBody()
                 .ret();
 
+//        System.out.println(BytecodeUtils.dumpBytecodeTree(definition));
         return defineClass(definition, clazz, classLoader);
     }
 
@@ -504,6 +506,7 @@ public class StateCompiler
         // return size
         body.append(size.ret());
 
+//        System.out.println(BytecodeUtils.dumpBytecodeTree(definition));
         return defineClass(definition, clazz, classLoader);
     }
 

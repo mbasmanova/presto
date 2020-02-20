@@ -46,6 +46,7 @@ public final class AggregationNode
 {
     private final PlanNode source;
     private final Map<VariableReferenceExpression, Aggregation> aggregations;
+    private final Map<VariableReferenceExpression, ValueRangeStats> groupingKeyStats;
     private final GroupingSetDescriptor groupingSets;
     private final List<VariableReferenceExpression> preGroupedVariables;
     private final Step step;
@@ -92,6 +93,7 @@ public final class AggregationNode
         outputs.addAll(new ArrayList<>(aggregations.keySet()));
 
         this.outputs = unmodifiableList(outputs);
+        this.groupingKeyStats = Collections.emptyMap();
     }
 
     public List<VariableReferenceExpression> getGroupingKeys()
@@ -144,6 +146,12 @@ public final class AggregationNode
     public Map<VariableReferenceExpression, Aggregation> getAggregations()
     {
         return aggregations;
+    }
+
+    @JsonProperty
+    public Map<VariableReferenceExpression, ValueRangeStats> getGroupingKeyStats()
+    {
+        return groupingKeyStats;
     }
 
     @JsonProperty
@@ -422,6 +430,34 @@ public final class AggregationNode
         public int hashCode()
         {
             return Objects.hash(call, filter, orderingScheme, isDistinct, mask);
+        }
+    }
+
+    public static final class ValueRangeStats
+    {
+        private final double min;
+        private final double max;
+
+        @JsonCreator
+        public ValueRangeStats(
+                @JsonProperty("min") double min,
+                @JsonProperty("max") double max)
+        {
+            checkArgument(min <= max, "Min must not be greater than max");
+            this.min = min;
+            this.max = max;
+        }
+
+        @JsonProperty
+        public double getMin()
+        {
+            return min;
+        }
+
+        @JsonProperty
+        public double getMax()
+        {
+            return max;
         }
     }
 

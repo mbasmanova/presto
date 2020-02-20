@@ -89,9 +89,12 @@ import com.facebook.presto.operator.WindowFunctionDefinition;
 import com.facebook.presto.operator.WindowOperator.WindowOperatorFactory;
 import com.facebook.presto.operator.aggregation.Accumulator;
 import com.facebook.presto.operator.aggregation.AccumulatorFactory;
+import com.facebook.presto.operator.aggregation.BigintSumAccumulatorFactory;
+import com.facebook.presto.operator.aggregation.DoubleSumAccumulatorFactory;
 import com.facebook.presto.operator.aggregation.GroupedAccumulator;
 import com.facebook.presto.operator.aggregation.InternalAggregationFunction;
 import com.facebook.presto.operator.aggregation.LambdaProvider;
+import com.facebook.presto.operator.aggregation.RealSumAccumulatorFactory;
 import com.facebook.presto.operator.exchange.LocalExchange.LocalExchangeFactory;
 import com.facebook.presto.operator.exchange.LocalExchangeSinkOperator.LocalExchangeSinkOperatorFactory;
 import com.facebook.presto.operator.exchange.LocalExchangeSourceOperator.LocalExchangeSourceOperatorFactory;
@@ -235,6 +238,7 @@ import static com.facebook.presto.SystemSessionProperties.getTaskConcurrency;
 import static com.facebook.presto.SystemSessionProperties.getTaskPartitionedWriterCount;
 import static com.facebook.presto.SystemSessionProperties.getTaskWriterCount;
 import static com.facebook.presto.SystemSessionProperties.isExchangeCompressionEnabled;
+import static com.facebook.presto.SystemSessionProperties.isOptimizeSumAggregation;
 import static com.facebook.presto.SystemSessionProperties.isOptimizedRepartitioningEnabled;
 import static com.facebook.presto.SystemSessionProperties.isSpillEnabled;
 import static com.facebook.presto.expressions.LogicalRowExpressions.TRUE_CONSTANT;
@@ -261,6 +265,7 @@ import static com.facebook.presto.spi.plan.AggregationNode.Step.PARTIAL;
 import static com.facebook.presto.spi.relation.ExpressionOptimizer.Level.OPTIMIZED;
 import static com.facebook.presto.spi.type.BigintType.BIGINT;
 import static com.facebook.presto.spi.type.DoubleType.DOUBLE;
+import static com.facebook.presto.spi.type.RealType.REAL;
 import static com.facebook.presto.spi.type.TypeUtils.writeNativeValue;
 import static com.facebook.presto.sql.gen.LambdaBytecodeGenerator.compileLambdaProvider;
 import static com.facebook.presto.sql.planner.RowExpressionInterpreter.rowExpressionInterpreter;
@@ -2771,17 +2776,31 @@ public class LocalExecutionPlanner
             List<VariableReferenceExpression> aggregationOutputVariables = new ArrayList<>();
             List<AccumulatorFactory> accumulatorFactories = new ArrayList<>();
 
-            // special case for partial SUM aggregations
-            if (PARTIAL.equals(step) && aggregations.values().stream().allMatch(this::isSimpleSum)) {
-//                accumulatorFactories.add(new MultiDoubleSumAccumulatorFactory(aggregations, source.getLayout()));
-            }
-
             for (Map.Entry<VariableReferenceExpression, Aggregation> entry : aggregations.entrySet()) {
                 VariableReferenceExpression variable = entry.getKey();
                 Aggregation aggregation = entry.getValue();
 
-                accumulatorFactories.add(buildAccumulatorFactory(source, aggregation));
                 aggregationOutputVariables.add(variable);
+
+                if (isOptimizeSumAggregation(session) && PARTIAL.equals(step) && isSimpleSum(aggregation)) {
+                    int inputChannel = source.getLayout().get(aggregation.getArguments().get(0));
+                    Type inputType = source.getTypes().get(inputChannel);
+                    if (DOUBLE == inputType) {
+                        accumulatorFactories.add(new DoubleSumAccumulatorFactory(inputChannel));
+                    }
+                    else if (REAL == inputType) {
+                        accumulatorFactories.add(new RealSumAccumulatorFactory(inputChannel));
+                    }
+                    else if (BIGINT == inputType) {
+                        accumulatorFactories.add(new BigintSumAccumulatorFactory(inputChannel));
+                    }
+                    else {
+                        accumulatorFactories.add(buildAccumulatorFactory(source, aggregation));
+                    }
+                }
+                else {
+                    accumulatorFactories.add(buildAccumulatorFactory(source, aggregation));
+                }
             }
 
             // add group-by key fields each in a separate channel

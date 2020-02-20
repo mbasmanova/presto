@@ -22,6 +22,7 @@ import com.facebook.presto.sql.planner.iterative.Rule;
 import com.facebook.presto.sql.planner.optimizations.AggregationNodeUtils;
 import com.google.common.collect.Streams;
 
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -43,8 +44,22 @@ public class PruneAggregationSourceColumns
     @Override
     public Result apply(AggregationNode aggregationNode, Captures captures, Context context)
     {
+//        PlanNodeStatsEstimate stats = context.getStatsProvider().getStats(aggregationNode.getSource());
+        List<VariableReferenceExpression> groupingKeys = aggregationNode.getGroupingKeys();
+//        for (VariableReferenceExpression groupingKey : groupingKeys) {
+//            VariableStatsEstimate groupingKeyStats = stats.getVariableStatistics(groupingKey);
+//            if (groupingKeyStats.isUnknown()) {
+//                break;
+//            }
+//
+//            double lowValue = groupingKeyStats.getLowValue();
+//            double highValue = groupingKeyStats.getHighValue();
+//
+//            System.out.println("low: " + lowValue + ", high: " + highValue);
+//        }
+
         Set<VariableReferenceExpression> requiredInputs = Streams.concat(
-                aggregationNode.getGroupingKeys().stream(),
+                groupingKeys.stream(),
                 aggregationNode.getHashVariable().map(Stream::of).orElse(Stream.empty()),
                 aggregationNode.getAggregations().values().stream()
                         .flatMap(aggregation -> getAggregationInputs(aggregation, context.getVariableAllocator().getTypes())))

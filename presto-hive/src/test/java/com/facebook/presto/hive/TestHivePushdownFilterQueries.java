@@ -108,43 +108,222 @@ public class TestHivePushdownFilterQueries
                 ImmutableMap.of("failure-detector.enabled", "false"),
                 "sql-standard",
                 ImmutableMap.of("hive.pushdown-filter-enabled", "true"),
-                Optional.empty());
+                Optional.of(Paths.get("/Users/mbasmanova/aria/test_data")));
 
-        queryRunner.execute(noPushdownFilter(queryRunner.getDefaultSession()),
-                "CREATE TABLE lineitem_ex (linenumber, orderkey, partkey, suppkey, quantity, extendedprice, tax, shipinstruct, shipmode, ship_by_air, is_returned, ship_day, ship_month, ship_timestamp, commit_timestamp, discount_real, discount, tax_real, ship_day_month, discount_long_decimal, tax_short_decimal, long_decimals, keys, doubles, nested_keys, flags, reals, info, dates, timestamps, comment, uppercase_comment, empty_comment, fixed_comment, char_array, varchar_array) AS " +
-                        "SELECT linenumber, orderkey, partkey, suppkey, quantity, extendedprice, tax, shipinstruct, shipmode, " +
-                        "   IF (linenumber % 5 = 0, null, shipmode = 'AIR') AS ship_by_air, " +
-                        "   IF (linenumber % 7 = 0, null, returnflag = 'R') AS is_returned, " +
-                        "   IF (linenumber % 4 = 0, null, CAST(day(shipdate) AS TINYINT)) AS ship_day, " +
-                        "   IF (linenumber % 6 = 0, null, CAST(month(shipdate) AS TINYINT)) AS ship_month, " +
-                        "   IF (linenumber % 3 = 0, null, CAST(shipdate AS TIMESTAMP)) AS ship_timestamp, " +
-                        "   IF (orderkey % 3 = 0, null, CAST(commitdate AS TIMESTAMP)) AS commit_timestamp, " +
-                        "   IF (orderkey % 5 = 0, null, CAST(discount AS REAL)) AS discount_real, " +
-                        "   IF (orderkey % 43 = 0, null, discount) AS discount, " +
-                        "   IF (orderkey % 7 = 0, null, CAST(tax AS REAL)) AS tax_real, " +
-                        "   IF (linenumber % 2 = 0, null, ARRAY[CAST(day(shipdate) AS TINYINT), CAST(month(shipdate) AS TINYINT)]) AS ship_day_month, " +
-                        "   IF (orderkey % 37 = 0, null, CAST(discount AS DECIMAL(20, 8))) AS discount_long_decimal, " +
-                        "   IF (orderkey % 41 = 0, null, CAST(tax AS DECIMAL(3, 2))) AS tax_short_decimal, " +
-                        "   IF (orderkey % 43 = 0, null, ARRAY[CAST(discount AS DECIMAL(20, 8)), CAST(tax AS DECIMAL(20, 8))]) AS long_decimals, " +
-                        "   IF (orderkey % 11 = 0, null, ARRAY[orderkey, partkey, suppkey]) AS keys, " +
-                        "   IF (orderkey % 41 = 0, null, ARRAY[extendedprice, discount, tax]) AS doubles, " +
-                        "   IF (orderkey % 13 = 0, null, ARRAY[ARRAY[orderkey, partkey], ARRAY[suppkey], IF (orderkey % 17 = 0, null, ARRAY[orderkey, partkey])]) AS nested_keys, " +
-                        "   IF (orderkey % 17 = 0, null, ARRAY[shipmode = 'AIR', returnflag = 'R']) AS flags, " +
-                        "   IF (orderkey % 19 = 0, null, ARRAY[CAST(discount AS REAL), CAST(tax AS REAL)]), " +
-                        "   IF (orderkey % 23 = 0, null, CAST(ROW(orderkey, linenumber, ROW(day(shipdate), month(shipdate), year(shipdate))) AS ROW(orderkey BIGINT, linenumber INTEGER, shipdate ROW(ship_day TINYINT, ship_month TINYINT, ship_year INTEGER)))), " +
-                        "   IF (orderkey % 31 = 0, NULL, ARRAY[" +
-                        "       CAST(ROW(day(shipdate), month(shipdate), year(shipdate)) AS ROW(day TINYINT, month TINYINT, year INTEGER)), " +
-                        "       CAST(ROW(day(commitdate), month(commitdate), year(commitdate)) AS ROW(day TINYINT, month TINYINT, year INTEGER)), " +
-                        "       CAST(ROW(day(receiptdate), month(receiptdate), year(receiptdate)) AS ROW(day TINYINT, month TINYINT, year INTEGER))]), " +
-                        "   IF (orderkey % 37 = 0, NULL, ARRAY[CAST(shipdate AS TIMESTAMP), CAST(commitdate AS TIMESTAMP)]) AS timestamps, " +
-                        "   IF (orderkey % 43 = 0, NULL, comment) AS comment, " +
-                        "   IF (orderkey % 43 = 0, NULL, upper(comment)) AS uppercase_comment, " +
-                        "   CAST('' as VARBINARY) AS empty_comment, \n" +
-                        "   IF (orderkey % 47 = 0, NULL, CAST(comment AS CHAR(5))) AS fixed_comment, " +
-                        "   IF (orderkey % 49 = 0, NULL, ARRAY[CAST(comment AS CHAR(4)), CAST(comment AS CHAR(3)), CAST(SUBSTR(comment,length(comment) - 4) AS CHAR(4))]) AS char_array, " +
-                        "   IF (orderkey % 49 = 0, NULL, ARRAY[comment, comment]) AS varchar_array " +
-                        "FROM lineitem");
+//        queryRunner.execute(noPushdownFilter(queryRunner.getDefaultSession()),
+//                "CREATE TABLE lineitem_ex (linenumber, orderkey, partkey, suppkey, quantity, extendedprice, tax, shipinstruct, shipmode, ship_by_air, is_returned, ship_day, ship_month, ship_timestamp, commit_timestamp, discount_real, discount, tax_real, ship_day_month, discount_long_decimal, tax_short_decimal, long_decimals, keys, doubles, nested_keys, flags, reals, info, dates, timestamps, comment, uppercase_comment, empty_comment, fixed_comment, char_array, varchar_array) AS " +
+//                        "SELECT linenumber, orderkey, partkey, suppkey, quantity, extendedprice, tax, shipinstruct, shipmode, " +
+//                        "   IF (linenumber % 5 = 0, null, shipmode = 'AIR') AS ship_by_air, " +
+//                        "   IF (linenumber % 7 = 0, null, returnflag = 'R') AS is_returned, " +
+//                        "   IF (linenumber % 4 = 0, null, CAST(day(shipdate) AS TINYINT)) AS ship_day, " +
+//                        "   IF (linenumber % 6 = 0, null, CAST(month(shipdate) AS TINYINT)) AS ship_month, " +
+//                        "   IF (linenumber % 3 = 0, null, CAST(shipdate AS TIMESTAMP)) AS ship_timestamp, " +
+//                        "   IF (orderkey % 3 = 0, null, CAST(commitdate AS TIMESTAMP)) AS commit_timestamp, " +
+//                        "   IF (orderkey % 5 = 0, null, CAST(discount AS REAL)) AS discount_real, " +
+//                        "   IF (orderkey % 43 = 0, null, discount) AS discount, " +
+//                        "   IF (orderkey % 7 = 0, null, CAST(tax AS REAL)) AS tax_real, " +
+//                        "   IF (linenumber % 2 = 0, null, ARRAY[CAST(day(shipdate) AS TINYINT), CAST(month(shipdate) AS TINYINT)]) AS ship_day_month, " +
+//                        "   IF (orderkey % 37 = 0, null, CAST(discount AS DECIMAL(20, 8))) AS discount_long_decimal, " +
+//                        "   IF (orderkey % 41 = 0, null, CAST(tax AS DECIMAL(3, 2))) AS tax_short_decimal, " +
+//                        "   IF (orderkey % 43 = 0, null, ARRAY[CAST(discount AS DECIMAL(20, 8)), CAST(tax AS DECIMAL(20, 8))]) AS long_decimals, " +
+//                        "   IF (orderkey % 11 = 0, null, ARRAY[orderkey, partkey, suppkey]) AS keys, " +
+//                        "   IF (orderkey % 41 = 0, null, ARRAY[extendedprice, discount, tax]) AS doubles, " +
+//                        "   IF (orderkey % 13 = 0, null, ARRAY[ARRAY[orderkey, partkey], ARRAY[suppkey], IF (orderkey % 17 = 0, null, ARRAY[orderkey, partkey])]) AS nested_keys, " +
+//                        "   IF (orderkey % 17 = 0, null, ARRAY[shipmode = 'AIR', returnflag = 'R']) AS flags, " +
+//                        "   IF (orderkey % 19 = 0, null, ARRAY[CAST(discount AS REAL), CAST(tax AS REAL)]), " +
+//                        "   IF (orderkey % 23 = 0, null, CAST(ROW(orderkey, linenumber, ROW(day(shipdate), month(shipdate), year(shipdate))) AS ROW(orderkey BIGINT, linenumber INTEGER, shipdate ROW(ship_day TINYINT, ship_month TINYINT, ship_year INTEGER)))), " +
+//                        "   IF (orderkey % 31 = 0, NULL, ARRAY[" +
+//                        "       CAST(ROW(day(shipdate), month(shipdate), year(shipdate)) AS ROW(day TINYINT, month TINYINT, year INTEGER)), " +
+//                        "       CAST(ROW(day(commitdate), month(commitdate), year(commitdate)) AS ROW(day TINYINT, month TINYINT, year INTEGER)), " +
+//                        "       CAST(ROW(day(receiptdate), month(receiptdate), year(receiptdate)) AS ROW(day TINYINT, month TINYINT, year INTEGER))]), " +
+//                        "   IF (orderkey % 37 = 0, NULL, ARRAY[CAST(shipdate AS TIMESTAMP), CAST(commitdate AS TIMESTAMP)]) AS timestamps, " +
+//                        "   IF (orderkey % 43 = 0, NULL, comment) AS comment, " +
+//                        "   IF (orderkey % 43 = 0, NULL, upper(comment)) AS uppercase_comment, " +
+//                        "   CAST('' as VARBINARY) AS empty_comment, \n" +
+//                        "   IF (orderkey % 47 = 0, NULL, CAST(comment AS CHAR(5))) AS fixed_comment, " +
+//                        "   IF (orderkey % 49 = 0, NULL, ARRAY[CAST(comment AS CHAR(4)), CAST(comment AS CHAR(3)), CAST(SUBSTR(comment,length(comment) - 4) AS CHAR(4))]) AS char_array, " +
+//                        "   IF (orderkey % 49 = 0, NULL, ARRAY[comment, comment]) AS varchar_array " +
+//                        "FROM lineitem");
         return queryRunner;
+    }
+
+    @Test
+    public void test1()
+    {
+        assertQuery("SELECT linenumber, sum(quantity) FROM lineitem GROUP BY linenumber");
+
+        assertQuery("SELECT cast(linenumber as tinyint), cast(orderkey as integer), sum(quantity) FROM lineitem GROUP BY cast(linenumber as tinyint), cast(orderkey as integer)");
+    }
+
+    @Test
+    public void test()
+    {
+        assertQuerySucceeds("WITH results_sum_over_ds AS (\n" +
+                "  SELECT \n" +
+//                "    bitwise_or(\n" +
+//                "      bitwise_or(\n" +
+//                "        bitwise_shift_left(version_id, 48, 64), \n" +
+//                "        bitwise_shift_left(segment, 32, 64)\n" +
+//                "      ), \n" +
+//                "      dpa_breakdown\n" +
+//                "    ) as key, \n" +
+                "   cast(version_id as smallint) as version_id, cast(segment as integer) as segment, cast(dpa_breakdown as tinyint) as dpa_breakdown, " +
+                "    COALESCE(\n" +
+                "      SUM(quality_value), \n" +
+                "      0\n" +
+                "    ) AS quality_value, \n" +
+                "    COALESCE(\n" +
+                "      SUM(weighted_awe), \n" +
+                "      0\n" +
+                "    ) AS weighted_awe, \n" +
+                "    COALESCE(\n" +
+                "      SUM(negative_event_quality_value), \n" +
+                "      0\n" +
+                "    ) AS negative_event_quality_value, \n" +
+                "    COALESCE(\n" +
+                "      SUM(subsidy_value), \n" +
+                "      0\n" +
+                "    ) AS subsidy_value, \n" +
+                "    COALESCE(\n" +
+                "      SUM(event_based_revenue), \n" +
+                "      0\n" +
+                "    ) AS event_based_revenue, \n" +
+                "    COALESCE(\n" +
+                "      SUM(post_click_quality_value), \n" +
+                "      0\n" +
+                "    ) AS post_click_quality_value, \n" +
+                "    COALESCE(\n" +
+                "      SUM(impressions), \n" +
+                "      0\n" +
+                "    ) AS impressions, \n" +
+                "    COALESCE(\n" +
+                "      SUM(\n" +
+                "        impression_quality_value_without_subsidy\n" +
+                "      ), \n" +
+                "      0\n" +
+                "    ) AS impression_quality_value_without_subsidy, \n" +
+                "    COALESCE(\n" +
+                "      SUM(down_funnel_conversions), \n" +
+                "      0\n" +
+                "    ) AS down_funnel_conversions, \n" +
+                "    COALESCE(\n" +
+                "      SUM(conversions_for_calibration), \n" +
+                "      0\n" +
+                "    ) AS conversions_for_calibration, \n" +
+                "    COALESCE(\n" +
+                "      SUM(conversions), \n" +
+                "      0\n" +
+                "    ) AS conversions, \n" +
+                "    COALESCE(\n" +
+                "      SUM(estimated_ads_value), \n" +
+                "      0\n" +
+                "    ) AS estimated_ads_value, \n" +
+                "    COALESCE(\n" +
+                "      SUM(revenue), \n" +
+                "      0\n" +
+                "    ) AS revenue, \n" +
+                "    COALESCE(\n" +
+                "      SUM(clicks), \n" +
+                "      0\n" +
+                "    ) AS clicks, \n" +
+                "    COALESCE(\n" +
+                "      SUM(capped_ads_value_10x), \n" +
+                "      0\n" +
+                "    ) AS capped_ads_value_10x, \n" +
+                "    COALESCE(\n" +
+                "      SUM(value), \n" +
+                "      0\n" +
+                "    ) AS value, \n" +
+                "    COALESCE(\n" +
+                "      SUM(lte_ads_value), \n" +
+                "      0\n" +
+                "    ) AS lte_ads_value, \n" +
+                "    COALESCE(\n" +
+                "      SUM(overdelivery_revenue), \n" +
+                "      0\n" +
+                "    ) AS overdelivery_revenue, \n" +
+                "    COALESCE(\n" +
+                "      SUM(value_capped_3x), \n" +
+                "      0\n" +
+                "    ) AS value_capped_3x, \n" +
+                "    COALESCE(\n" +
+                "      SUM(capped_sanitized_value_10x), \n" +
+                "      0\n" +
+                "    ) AS capped_sanitized_value_10x, \n" +
+                "    COALESCE(\n" +
+                "      SUM(sanitized_value), \n" +
+                "      0\n" +
+                "    ) AS sanitized_value \n" +
+                "  FROM \n" +
+                "    test_qrt \n" +
+                "  WHERE \n" +
+                "    attributed_ds IN (\n" +
+                "      '2019-11-10', '2019-11-11', '2019-11-12', \n" +
+                "      '2019-11-13', '2019-11-14', '2019-11-15', \n" +
+                "      '2019-11-16', '2019-11-17', '2019-11-18', \n" +
+                "      '2019-11-19', '2019-11-20', '2019-11-21', \n" +
+                "      '2019-11-22', '2019-11-23', '2019-11-24', \n" +
+                "      '2019-11-25', '2019-11-26', '2019-11-27', \n" +
+                "      '2019-11-28', '2019-11-29', '2019-11-30', \n" +
+                "      '2019-12-01', '2019-12-02', '2019-12-03', \n" +
+                "      '2019-12-04', '2019-12-05', '2019-12-06'\n" +
+                "    ) \n" +
+                "    AND experiment_id = 3 \n" +
+                "    AND universe IN ('qrt_group_ads_ranking_1') \n" +
+                "    AND valid_experiment_reading IN (1) \n" +
+                "  GROUP BY \n" +
+                "    cast(version_id as smallint), cast(segment as integer), cast(dpa_breakdown as tinyint)\n" +
+                ") \n" +
+                "SELECT \n" +
+                "  CHECKSUM(version_id), \n" +
+                "  CHECKSUM(segment), \n" +
+                "  CHECKSUM(dpa_breakdown), \n" +
+//                "  checksum(\n" +
+//                "    cast(\n" +
+//                "      bitwise_and(\n" +
+//                "        key, \n" +
+//                "        cast(\n" +
+//                "          pow(2, 31) -1 as bigint\n" +
+//                "        )\n" +
+//                "      ) as integer\n" +
+//                "    )\n" +
+//                "  ) as dpa_breakdown, \n" +
+//                "  checksum(\n" +
+//                "    cast(\n" +
+//                "      bitwise_and(\n" +
+//                "        bitwise_logical_shift_right(key, 48, 64), \n" +
+//                "        cast(\n" +
+//                "          pow(2, 15) -1 as bigint\n" +
+//                "        )\n" +
+//                "      ) as integer\n" +
+//                "    )\n" +
+//                "  ) as version_id, \n" +
+                "  CHECKSUM(quality_value), \n" +
+                "  CHECKSUM(weighted_awe), \n" +
+                "  CHECKSUM(negative_event_quality_value), \n" +
+                "  CHECKSUM(subsidy_value), \n" +
+                "  CHECKSUM(event_based_revenue), \n" +
+                "  CHECKSUM(post_click_quality_value), \n" +
+                "  CHECKSUM(impressions), \n" +
+                "  CHECKSUM(\n" +
+                "    impression_quality_value_without_subsidy\n" +
+                "  ), \n" +
+                "  CHECKSUM(down_funnel_conversions), \n" +
+                "  CHECKSUM(conversions_for_calibration), \n" +
+                "  CHECKSUM(conversions), \n" +
+                "  CHECKSUM(estimated_ads_value), \n" +
+                "  CHECKSUM(revenue), \n" +
+                "  CHECKSUM(clicks), \n" +
+                "  CHECKSUM(capped_ads_value_10x), \n" +
+                "  CHECKSUM(value), \n" +
+                "  CHECKSUM(lte_ads_value), \n" +
+                "  CHECKSUM(overdelivery_revenue), \n" +
+                "  CHECKSUM(value_capped_3x), \n" +
+                "  CHECKSUM(capped_sanitized_value_10x), \n" +
+                "  CHECKSUM(sanitized_value), \n" +
+                "  count() \n" +
+                "FROM \n" +
+                "  results_sum_over_ds");
     }
 
     @Test
