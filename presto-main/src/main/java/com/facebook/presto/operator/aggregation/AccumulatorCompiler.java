@@ -772,7 +772,7 @@ public class AccumulatorCompiler
         Variable position = scope.getVariable("position");
         for (FieldDefinition stateField : stateFields) {
             BytecodeExpression state = scope.getThis().getField(stateField);
-            block.append(state.invoke("setGroupId", void.class, groupIdsBlock.invoke("getGroupId", long.class, position)));
+            block.append(state.invoke("setGroupId", void.class, groupIdsBlock.invoke("getGroupIdUnchecked", long.class, position)));
         }
     }
 

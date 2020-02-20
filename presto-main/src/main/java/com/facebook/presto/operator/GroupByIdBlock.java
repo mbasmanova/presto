@@ -49,6 +49,11 @@ public class GroupByIdBlock
         return BIGINT.getLong(block, position);
     }
 
+    public long getGroupIdUnchecked(int position)
+    {
+        return BIGINT.getLongUnchecked(block, position);
+    }
+
     @Override
     public Block getRegion(int positionOffset, int length)
     {
