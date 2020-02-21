@@ -242,4 +242,9 @@ public class IntArrayBlock
         assert internalPositionInRange(internalPosition, getOffsetBase(), getPositionCount());
         return values[internalPosition];
     }
+
+    public boolean[] getValueIsNull()
+    {
+        return valueIsNull;
+    }
 }

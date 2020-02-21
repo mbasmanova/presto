@@ -19,19 +19,42 @@ import com.facebook.presto.operator.GroupByIdBlock;
 import com.facebook.presto.spi.Page;
 import com.facebook.presto.spi.block.Block;
 import com.facebook.presto.spi.block.BlockBuilder;
+import com.facebook.presto.spi.block.IntArrayBlock;
 import com.facebook.presto.spi.block.RunLengthEncodedBlock;
 import com.facebook.presto.spi.type.Type;
 import org.openjdk.jol.info.ClassLayout;
+import sun.misc.Unsafe;
+
+import java.lang.reflect.Field;
 
 import static com.facebook.presto.spi.type.DoubleType.DOUBLE;
 import static com.facebook.presto.spi.type.RealType.REAL;
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.lang.Float.intBitsToFloat;
+import static java.lang.Math.toIntExact;
+import static sun.misc.Unsafe.ARRAY_BOOLEAN_BASE_OFFSET;
 
 public class RealSumGroupedAccumulator
         implements GroupedAccumulator
 {
-    private static final long INSTANCE_SIZE = ClassLayout.parseClass(DoubleSumAccumulator.class).instanceSize();
+    private static final Unsafe unsafe;
+
+    static {
+        try {
+            // fetch theUnsafe object
+            Field field = Unsafe.class.getDeclaredField("theUnsafe");
+            field.setAccessible(true);
+            unsafe = (Unsafe) field.get(null);
+            if (unsafe == null) {
+                throw new RuntimeException("Unsafe access not available");
+            }
+        }
+        catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static final long INSTANCE_SIZE = ClassLayout.parseClass(RealSumGroupedAccumulator.class).instanceSize();
 
     private final int inputChannel;
     private DoubleBigArray sums;
@@ -41,8 +64,8 @@ public class RealSumGroupedAccumulator
     {
         checkArgument(inputChannel >= 0, "Input channel must not be negative");
         this.inputChannel = inputChannel;
-        this.sums = new DoubleBigArray();
-        this.nulls = new BooleanBigArray(true);
+        sums = new DoubleBigArray();
+        nulls = new BooleanBigArray(true);
     }
 
     @Override
@@ -66,8 +89,9 @@ public class RealSumGroupedAccumulator
     @Override
     public void addInput(GroupByIdBlock groupIdsBlock, Page page)
     {
-        sums.ensureCapacity(groupIdsBlock.getGroupCount());
-        nulls.ensureCapacity(groupIdsBlock.getGroupCount());
+        int groupCount = toIntExact(groupIdsBlock.getGroupCount());
+        sums.ensureCapacity(groupCount);
+        nulls.ensureCapacity(groupCount);
 
         Block block = page.getBlock(inputChannel);
         if (block instanceof RunLengthEncodedBlock && block.isNull(0)) {
@@ -75,11 +99,26 @@ public class RealSumGroupedAccumulator
         }
 
         int positionCount = page.getPositionCount();
-        for (int i = 0; i < positionCount; i++) {
-            if (!block.isNull(i)) {
-                long groupId = groupIdsBlock.getGroupIdUnchecked(i);
+
+        boolean[] nulls = ((IntArrayBlock) block).getValueIsNull();
+        if (nulls == null) {
+            for (int i = 0; i < positionCount; i++) {
+                int groupId = toIntExact(groupIdsBlock.getGroupIdUnchecked(i));
                 sums.add(groupId, intBitsToFloat(block.getIntUnchecked(i)));
-                nulls.set(groupId, false);
+                this.nulls.set(groupId, false);
+            }
+        }
+        else {
+            for (int offset = 0; offset + 8 < positionCount; offset += 8) {
+                long flags = unsafe.getLong(nulls, (long) ARRAY_BOOLEAN_BASE_OFFSET + offset) ^ 0x0101010101010101L;
+                while (flags != 0) {
+                    int low = Long.numberOfTrailingZeros(flags) >> 3;
+                    flags &= flags - 1;
+
+                    int groupId = toIntExact(groupIdsBlock.getGroupIdUnchecked(offset + low));
+                    sums.add(groupId, intBitsToFloat(block.getIntUnchecked(offset + low)));
+                    this.nulls.set(groupId, false);
+                }
             }
         }
     }

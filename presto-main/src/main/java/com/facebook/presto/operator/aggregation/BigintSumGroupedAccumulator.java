@@ -29,7 +29,7 @@ import static com.google.common.base.Preconditions.checkArgument;
 public class BigintSumGroupedAccumulator
         implements GroupedAccumulator
 {
-    private static final long INSTANCE_SIZE = ClassLayout.parseClass(DoubleSumAccumulator.class).instanceSize();
+    private static final long INSTANCE_SIZE = ClassLayout.parseClass(BigintSumGroupedAccumulator.class).instanceSize();
 
     private final int inputChannel;
     private LongBigArray sums;
@@ -76,7 +76,7 @@ public class BigintSumGroupedAccumulator
         for (int i = 0; i < positionCount; i++) {
             if (!block.isNull(i)) {
                 long groupId = groupIdsBlock.getGroupIdUnchecked(i);
-                sums.add(groupId, BIGINT.getLongUnchecked(block, i));
+                sums.add(groupId, BIGINT.getLong(block, i));
                 nulls.set(groupId, false);
             }
         }

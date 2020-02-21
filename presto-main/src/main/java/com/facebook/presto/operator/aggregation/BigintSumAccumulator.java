@@ -104,17 +104,16 @@ public class BigintSumAccumulator
     @Override
     public void evaluateIntermediate(BlockBuilder blockBuilder)
     {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void evaluateFinal(BlockBuilder blockBuilder)
-    {
         if (empty) {
             blockBuilder.appendNull();
         }
         else {
             BIGINT.writeLong(blockBuilder, sum);
         }
+    }
+
+    @Override
+    public void evaluateFinal(BlockBuilder blockBuilder)
+    {
     }
 }
