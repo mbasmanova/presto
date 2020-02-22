@@ -131,6 +131,16 @@ public class LongDirectSelectiveStreamReader
                         readOffset = offset + positionCount;
                         return outputPositionCount;
                     }
+
+                    if (filter == null) {
+                        // no filter
+                        for (int i = 0; i < positionCount; i++) {
+                            values[i] = dataStream.next();
+                        }
+                        outputPositionCount = positionCount;
+                        readOffset = offset + positionCount;
+                        return outputPositionCount;
+                    }
                 }
             }
 
