@@ -150,10 +150,10 @@ public class TestHivePushdownFilterQueries
     @Test
     public void test1()
     {
-        Session preferArrayAggregstion = Session.builder(getSession())
+        Session preferArrayAggregation = Session.builder(getSession())
                 .setSystemProperty("prefer_array_aggregation", "true")
                 .build();
-        assertQuery(preferArrayAggregstion, "SELECT cast(linenumber as bigint), sum(quantity) FROM lineitem GROUP BY cast(linenumber as bigint)");
+        assertQuery(preferArrayAggregation, "SELECT cast(linenumber as bigint), sum(quantity) FROM lineitem GROUP BY cast(linenumber as bigint)");
 
 //        assertQuery("SELECT -linenumber, sum(quantity) FROM lineitem GROUP BY -linenumber");
 //
@@ -167,10 +167,10 @@ public class TestHivePushdownFilterQueries
     @Test
     public void test()
     {
-        Session preferArrayAggregstion = Session.builder(getSession())
+        Session preferArrayAggregation = Session.builder(getSession())
                 .setSystemProperty("prefer_array_aggregation", "true")
                 .build();
-        assertQuerySucceeds(preferArrayAggregstion, "WITH results_sum_over_ds AS (\n" +
+        assertQuerySucceeds(preferArrayAggregation, "WITH results_sum_over_ds AS (\n" +
                 "  SELECT \n" +
 //                "    bitwise_or(\n" +
 //                "      bitwise_or(\n" +
