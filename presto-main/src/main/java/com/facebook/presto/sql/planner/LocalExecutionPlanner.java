@@ -240,6 +240,7 @@ import static com.facebook.presto.SystemSessionProperties.getTaskWriterCount;
 import static com.facebook.presto.SystemSessionProperties.isExchangeCompressionEnabled;
 import static com.facebook.presto.SystemSessionProperties.isOptimizeSumAggregation;
 import static com.facebook.presto.SystemSessionProperties.isOptimizedRepartitioningEnabled;
+import static com.facebook.presto.SystemSessionProperties.isPreferArrayAggregation;
 import static com.facebook.presto.SystemSessionProperties.isSpillEnabled;
 import static com.facebook.presto.expressions.LogicalRowExpressions.TRUE_CONSTANT;
 import static com.facebook.presto.expressions.RowExpressionNodeInliner.replaceExpression;
@@ -2860,7 +2861,8 @@ public class LocalExecutionPlanner
                         unspillMemoryLimit,
                         spillerFactory,
                         joinCompiler,
-                        useSystemMemory);
+                        useSystemMemory,
+                        isPreferArrayAggregation(session));
             }
         }
 

@@ -44,7 +44,8 @@ public class GroupByHashPageIndexer
                 20,
                 false,
                 joinCompiler,
-                NOOP));
+                NOOP,
+                false));
     }
 
     public GroupByHashPageIndexer(GroupByHash hash)

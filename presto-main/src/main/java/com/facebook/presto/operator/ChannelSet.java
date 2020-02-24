@@ -90,7 +90,8 @@ public class ChannelSet
                     expectedPositions,
                     isDictionaryAggregationEnabled(operatorContext.getSession()),
                     joinCompiler,
-                    this::updateMemoryReservation);
+                    this::updateMemoryReservation,
+                    false);
             this.nullBlockPage = new Page(type.createBlockBuilder(null, 1, UNKNOWN.getFixedSize()).appendNull().build());
             this.operatorContext = requireNonNull(operatorContext, "operatorContext is null");
             this.localMemoryContext = operatorContext.localUserMemoryContext();

@@ -175,7 +175,8 @@ public class TopNRowNumberOperator
                     expectedPositions,
                     isDictionaryAggregationEnabled(operatorContext.getSession()),
                     joinCompiler,
-                    this::updateMemoryReservation);
+                    this::updateMemoryReservation,
+                    false);
         }
         else {
             groupByHash = new NoChannelGroupByHash();

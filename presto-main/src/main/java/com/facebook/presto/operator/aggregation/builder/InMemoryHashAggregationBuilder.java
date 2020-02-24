@@ -40,7 +40,6 @@ import com.google.common.util.concurrent.ListenableFuture;
 import io.airlift.units.DataSize;
 import it.unimi.dsi.fastutil.ints.AbstractIntIterator;
 import it.unimi.dsi.fastutil.ints.IntIterator;
-import it.unimi.dsi.fastutil.ints.IntIterators;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -64,6 +63,7 @@ public class InMemoryHashAggregationBuilder
     private final LocalMemoryContext systemMemoryContext;
     private final LocalMemoryContext localUserMemoryContext;
     private final boolean useSystemMemory;
+    private final boolean preferArrayAggregation;
 
     private boolean full;
 
@@ -78,7 +78,8 @@ public class InMemoryHashAggregationBuilder
             Optional<DataSize> maxPartialMemory,
             JoinCompiler joinCompiler,
             boolean yieldForMemoryReservation,
-            boolean useSystemMemory)
+            boolean useSystemMemory,
+            boolean preferArrayAggregation)
     {
         this(accumulatorFactories,
                 step,
@@ -91,7 +92,8 @@ public class InMemoryHashAggregationBuilder
                 Optional.empty(),
                 joinCompiler,
                 yieldForMemoryReservation,
-                useSystemMemory);
+                useSystemMemory,
+                preferArrayAggregation);
     }
 
     public InMemoryHashAggregationBuilder(
@@ -106,7 +108,8 @@ public class InMemoryHashAggregationBuilder
             Optional<Integer> overwriteIntermediateChannelOffset,
             JoinCompiler joinCompiler,
             boolean yieldForMemoryReservation,
-            boolean useSystemMemory)
+            boolean useSystemMemory,
+            boolean preferArrayAggregation)
     {
         UpdateMemory updateMemory;
         if (yieldForMemoryReservation) {
@@ -128,13 +131,15 @@ public class InMemoryHashAggregationBuilder
                 expectedGroups,
                 isDictionaryAggregationEnabled(operatorContext.getSession()),
                 joinCompiler,
-                updateMemory);
+                updateMemory,
+                preferArrayAggregation);
         this.operatorContext = operatorContext;
         this.partial = step.isOutputPartial();
         this.maxPartialMemory = maxPartialMemory.map(dataSize -> OptionalLong.of(dataSize.toBytes())).orElseGet(OptionalLong::empty);
         this.systemMemoryContext = operatorContext.newLocalSystemMemoryContext(InMemoryHashAggregationBuilder.class.getSimpleName());
         this.localUserMemoryContext = operatorContext.localUserMemoryContext();
         this.useSystemMemory = useSystemMemory;
+        this.preferArrayAggregation = preferArrayAggregation;
 
         // wrapper each function with an aggregator
         ImmutableList.Builder<Aggregator> builder = ImmutableList.builder();
@@ -351,7 +356,8 @@ public class InMemoryHashAggregationBuilder
 
     private IntIterator consecutiveGroupIds()
     {
-        return IntIterators.fromTo(0, groupByHash.getGroupCount());
+//        return IntIterators.fromTo(0, groupByHash.getGroupCount());
+        return groupByHash.getGroupIds();
     }
 
     private IntIterator hashSortedGroupIds()

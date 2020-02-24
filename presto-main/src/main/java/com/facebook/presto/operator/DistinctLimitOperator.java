@@ -129,7 +129,8 @@ public class DistinctLimitOperator
                 Math.min((int) limit, 10_000),
                 isDictionaryAggregationEnabled(operatorContext.getSession()),
                 joinCompiler,
-                this::updateMemoryReservation);
+                this::updateMemoryReservation,
+                false);
         remainingLimit = limit;
     }
 

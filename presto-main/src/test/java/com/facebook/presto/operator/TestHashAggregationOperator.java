@@ -187,6 +187,7 @@ public class TestHashAggregationOperator
                 succinctBytes(memoryLimitForMergeWithMemory),
                 spillerFactory,
                 joinCompiler,
+                false,
                 false);
 
         DriverContext driverContext = createDriverContext(memoryLimitForMerge);
@@ -244,6 +245,7 @@ public class TestHashAggregationOperator
                 succinctBytes(memoryLimitForMergeWithMemory),
                 spillerFactory,
                 joinCompiler,
+                false,
                 false);
 
         DriverContext driverContext = createDriverContext(memoryLimitForMerge);
@@ -290,6 +292,7 @@ public class TestHashAggregationOperator
                 succinctBytes(memoryLimitForMergeWithMemory),
                 spillerFactory,
                 joinCompiler,
+                false,
                 false);
 
         Operator operator = operatorFactory.createOperator(driverContext);
@@ -370,6 +373,7 @@ public class TestHashAggregationOperator
                 succinctBytes(memoryLimitForMergeWithMemory),
                 spillerFactory,
                 joinCompiler,
+                false,
                 false);
 
         toPages(operatorFactory, driverContext, input);
@@ -595,6 +599,7 @@ public class TestHashAggregationOperator
                 succinctBytes(Integer.MAX_VALUE),
                 spillerFactory,
                 joinCompiler,
+                false,
                 false);
 
         DriverContext driverContext = createDriverContext(smallPagesSpillThresholdSize);
@@ -649,6 +654,7 @@ public class TestHashAggregationOperator
                 succinctBytes(Integer.MAX_VALUE),
                 new FailingSpillerFactory(),
                 joinCompiler,
+                false,
                 false);
 
         try {
@@ -689,6 +695,7 @@ public class TestHashAggregationOperator
                 new DataSize(16, MEGABYTE),
                 new FailingSpillerFactory(),
                 joinCompiler,
+                false,
                 false);
 
         List<Page> outputPages = toPages(operatorFactory, createDriverContext(), ImmutableList.of(page)).stream()

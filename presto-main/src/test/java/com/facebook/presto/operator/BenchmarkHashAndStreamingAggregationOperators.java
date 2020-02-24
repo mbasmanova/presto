@@ -172,6 +172,7 @@ public class BenchmarkHashAndStreamingAggregationOperators
                     succinctBytes(Integer.MAX_VALUE),
                     spillerFactory,
                     joinCompiler,
+                    false,
                     false);
         }
 

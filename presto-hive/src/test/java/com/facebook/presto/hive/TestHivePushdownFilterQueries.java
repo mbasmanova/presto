@@ -150,21 +150,27 @@ public class TestHivePushdownFilterQueries
     @Test
     public void test1()
     {
-        assertQuery("SELECT linenumber, sum(quantity) FROM lineitem GROUP BY linenumber");
+        Session preferArrayAggregstion = Session.builder(getSession())
+                .setSystemProperty("prefer_array_aggregation", "true")
+                .build();
+        assertQuery(preferArrayAggregstion, "SELECT cast(linenumber as bigint), sum(quantity) FROM lineitem GROUP BY cast(linenumber as bigint)");
 
-        assertQuery("SELECT -linenumber, sum(quantity) FROM lineitem GROUP BY -linenumber");
-
-        assertQuery("SELECT cast(linenumber as tinyint), cast(orderkey as integer), sum(quantity) FROM lineitem GROUP BY cast(linenumber as tinyint), cast(orderkey as integer)");
-
-        assertQuery("SELECT -cast(linenumber as tinyint), cast(orderkey as integer), sum(quantity) FROM lineitem GROUP BY -cast(linenumber as tinyint), cast(orderkey as integer)");
-
-        assertQuery("SELECT cast(linenumber as tinyint), -cast(orderkey as integer), sum(quantity) FROM lineitem GROUP BY cast(linenumber as tinyint), -cast(orderkey as integer)");
+//        assertQuery("SELECT -linenumber, sum(quantity) FROM lineitem GROUP BY -linenumber");
+//
+//        assertQuery("SELECT cast(linenumber as tinyint), cast(orderkey as integer), sum(quantity) FROM lineitem GROUP BY cast(linenumber as tinyint), cast(orderkey as integer)");
+//
+//        assertQuery("SELECT -cast(linenumber as tinyint), cast(orderkey as integer), sum(quantity) FROM lineitem GROUP BY -cast(linenumber as tinyint), cast(orderkey as integer)");
+//
+//        assertQuery("SELECT cast(linenumber as tinyint), -cast(orderkey as integer), sum(quantity) FROM lineitem GROUP BY cast(linenumber as tinyint), -cast(orderkey as integer)");
     }
 
     @Test
     public void test()
     {
-        assertQuerySucceeds("WITH results_sum_over_ds AS (\n" +
+        Session preferArrayAggregstion = Session.builder(getSession())
+                .setSystemProperty("prefer_array_aggregation", "true")
+                .build();
+        assertQuerySucceeds(preferArrayAggregstion, "WITH results_sum_over_ds AS (\n" +
                 "  SELECT \n" +
 //                "    bitwise_or(\n" +
 //                "      bitwise_or(\n" +
@@ -173,7 +179,8 @@ public class TestHivePushdownFilterQueries
 //                "      ), \n" +
 //                "      dpa_breakdown\n" +
 //                "    ) as key, \n" +
-                "   cast(version_id as smallint) as version_id, cast(segment as integer) as segment, cast(dpa_breakdown as tinyint) as dpa_breakdown, " +
+//                "   cast(version_id as smallint) as version_id, cast(segment as integer) as segment, cast(dpa_breakdown as tinyint) as dpa_breakdown, " +
+                "(version_id-101) * 10000 * 4 + coalesce(dpa_breakdown, 3) * 10000 + segment as key,\n" +
                 "    COALESCE(\n" +
                 "      SUM(quality_value), \n" +
                 "      0\n" +
@@ -278,12 +285,14 @@ public class TestHivePushdownFilterQueries
                 "    AND universe IN ('qrt_group_ads_ranking_1') \n" +
                 "    AND valid_experiment_reading IN (1) \n" +
                 "  GROUP BY \n" +
-                "    cast(version_id as smallint), cast(segment as integer), cast(dpa_breakdown as tinyint)\n" +
+//                "    cast(version_id as smallint), cast(segment as integer), cast(dpa_breakdown as tinyint)\n" +
+                "1\n" +
                 ") \n" +
                 "SELECT \n" +
-                "  CHECKSUM(version_id), \n" +
-                "  CHECKSUM(segment), \n" +
-                "  CHECKSUM(dpa_breakdown), \n" +
+                "  CHECKSUM(key), \n" +
+//                "  CHECKSUM(version_id), \n" +
+//                "  CHECKSUM(segment), \n" +
+//                "  CHECKSUM(dpa_breakdown), \n" +
 //                "  checksum(\n" +
 //                "    cast(\n" +
 //                "      bitwise_and(\n" +

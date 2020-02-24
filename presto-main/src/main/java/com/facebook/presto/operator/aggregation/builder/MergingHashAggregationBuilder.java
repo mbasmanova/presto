@@ -150,6 +150,7 @@ public class MergingHashAggregationBuilder
                 Optional.of(overwriteIntermediateChannelOffset),
                 joinCompiler,
                 false,
+                false,
                 false);
     }
 }

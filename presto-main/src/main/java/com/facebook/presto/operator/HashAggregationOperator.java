@@ -71,6 +71,7 @@ public class HashAggregationOperator
         private final SpillerFactory spillerFactory;
         private final JoinCompiler joinCompiler;
         private final boolean useSystemMemory;
+        private final boolean preferArrayAggregation;
 
         private boolean closed;
 
@@ -109,7 +110,8 @@ public class HashAggregationOperator
                         throw new UnsupportedOperationException();
                     },
                     joinCompiler,
-                    useSystemMemory);
+                    useSystemMemory,
+                    false);
         }
 
         public HashAggregationOperatorFactory(
@@ -129,7 +131,8 @@ public class HashAggregationOperator
                 DataSize unspillMemoryLimit,
                 SpillerFactory spillerFactory,
                 JoinCompiler joinCompiler,
-                boolean useSystemMemory)
+                boolean useSystemMemory,
+                boolean preferArrayAggregation)
         {
             this(operatorId,
                     planNodeId,
@@ -148,7 +151,8 @@ public class HashAggregationOperator
                     DataSize.succinctBytes((long) (unspillMemoryLimit.toBytes() * MERGE_WITH_MEMORY_RATIO)),
                     spillerFactory,
                     joinCompiler,
-                    useSystemMemory);
+                    useSystemMemory,
+                    preferArrayAggregation);
         }
 
         @VisibleForTesting
@@ -170,7 +174,8 @@ public class HashAggregationOperator
                 DataSize memoryLimitForMergeWithMemory,
                 SpillerFactory spillerFactory,
                 JoinCompiler joinCompiler,
-                boolean useSystemMemory)
+                boolean useSystemMemory,
+                boolean preferArrayAggregation)
         {
             this.operatorId = operatorId;
             this.planNodeId = requireNonNull(planNodeId, "planNodeId is null");
@@ -190,6 +195,7 @@ public class HashAggregationOperator
             this.spillerFactory = requireNonNull(spillerFactory, "spillerFactory is null");
             this.joinCompiler = requireNonNull(joinCompiler, "joinCompiler is null");
             this.useSystemMemory = useSystemMemory;
+            this.preferArrayAggregation = preferArrayAggregation;
         }
 
         @Override
@@ -215,7 +221,8 @@ public class HashAggregationOperator
                     memoryLimitForMergeWithMemory,
                     spillerFactory,
                     joinCompiler,
-                    useSystemMemory);
+                    useSystemMemory,
+                    preferArrayAggregation);
             return hashAggregationOperator;
         }
 
@@ -246,7 +253,8 @@ public class HashAggregationOperator
                     memoryLimitForMergeWithMemory,
                     spillerFactory,
                     joinCompiler,
-                    useSystemMemory);
+                    useSystemMemory,
+                    preferArrayAggregation);
         }
     }
 
@@ -267,6 +275,7 @@ public class HashAggregationOperator
     private final SpillerFactory spillerFactory;
     private final JoinCompiler joinCompiler;
     private final boolean useSystemMemory;
+    private final boolean preferArrayAggregation;
 
     private final List<Type> types;
     private final HashCollisionsCounter hashCollisionsCounter;
@@ -297,7 +306,8 @@ public class HashAggregationOperator
             DataSize memoryLimitForMergeWithMemory,
             SpillerFactory spillerFactory,
             JoinCompiler joinCompiler,
-            boolean useSystemMemory)
+            boolean useSystemMemory,
+            boolean preferArrayAggregation)
     {
         this.operatorContext = requireNonNull(operatorContext, "operatorContext is null");
         requireNonNull(step, "step is null");
@@ -323,6 +333,7 @@ public class HashAggregationOperator
         this.hashCollisionsCounter = new HashCollisionsCounter(operatorContext);
         operatorContext.setInfoSupplier(hashCollisionsCounter);
         this.useSystemMemory = useSystemMemory;
+        this.preferArrayAggregation = preferArrayAggregation;
     }
 
     @Override
@@ -379,7 +390,8 @@ public class HashAggregationOperator
                         maxPartialMemory,
                         joinCompiler,
                         true,
-                        useSystemMemory);
+                        useSystemMemory,
+                        preferArrayAggregation);
             }
             else {
                 verify(!useSystemMemory, "using system memory in spillable aggregations is not supported");

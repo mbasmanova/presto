@@ -52,8 +52,8 @@ import static org.openjdk.jmh.annotations.Level.Invocation;
 @BenchmarkMode(Mode.AverageTime)
 public class BenchmarkMultiGroupByKeyProducer
 {
-//    @Benchmark
-//    @OperationsPerInvocation(1_000)
+    @Benchmark
+    @OperationsPerInvocation(1_000)
     public long[] benchmark(BenchmarkData data)
     {
         MultiGroupByKeyProducer producer = data.getProducer();
@@ -99,8 +99,8 @@ public class BenchmarkMultiGroupByKeyProducer
         return keys;
     }
 
-    @Benchmark
-    @OperationsPerInvocation(1_000)
+//    @Benchmark
+//    @OperationsPerInvocation(1_000)
     public long[] benchmark3(BenchmarkData data)
     {
         Page page = data.getPage();

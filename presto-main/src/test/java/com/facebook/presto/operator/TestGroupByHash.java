@@ -278,7 +278,8 @@ public class TestGroupByHash
                 () -> {
                     rehashCount.incrementAndGet();
                     return true;
-                });
+                },
+                false);
         groupByHash.addPage(new Page(valuesBlock, hashBlock)).process();
 
         // assert we call update memory every time we rehash; the rehash count = log2(length / FILL_RATIO)
@@ -314,7 +315,7 @@ public class TestGroupByHash
         int yields = 0;
 
         // test addPage
-        GroupByHash groupByHash = createGroupByHash(ImmutableList.of(type), new int[] {0}, Optional.of(1), 1, false, JOIN_COMPILER, updateMemory);
+        GroupByHash groupByHash = createGroupByHash(ImmutableList.of(type), new int[] {0}, Optional.of(1), 1, false, JOIN_COMPILER, updateMemory, false);
         boolean finish = false;
         Work<?> addPageWork = groupByHash.addPage(page);
         while (!finish) {
@@ -341,7 +342,7 @@ public class TestGroupByHash
         currentQuota.set(0);
         allowedQuota.set(3);
         yields = 0;
-        groupByHash = createGroupByHash(ImmutableList.of(type), new int[] {0}, Optional.of(1), 1, false, JOIN_COMPILER, updateMemory);
+        groupByHash = createGroupByHash(ImmutableList.of(type), new int[] {0}, Optional.of(1), 1, false, JOIN_COMPILER, updateMemory, false);
 
         finish = false;
         Work<GroupByIdBlock> getGroupIdsWork = groupByHash.getGroupIds(page);
@@ -389,7 +390,7 @@ public class TestGroupByHash
         int yields = 0;
 
         // test addPage
-        GroupByHash groupByHash = createGroupByHash(ImmutableList.of(VARCHAR), new int[] {0}, Optional.of(1), 1, true, JOIN_COMPILER, updateMemory);
+        GroupByHash groupByHash = createGroupByHash(ImmutableList.of(VARCHAR), new int[] {0}, Optional.of(1), 1, true, JOIN_COMPILER, updateMemory, false);
 
         boolean finish = false;
         Work<?> addPageWork = groupByHash.addPage(page);
@@ -417,7 +418,7 @@ public class TestGroupByHash
         currentQuota.set(0);
         allowedQuota.set(3);
         yields = 0;
-        groupByHash = createGroupByHash(ImmutableList.of(VARCHAR), new int[] {0}, Optional.of(1), 1, true, JOIN_COMPILER, updateMemory);
+        groupByHash = createGroupByHash(ImmutableList.of(VARCHAR), new int[] {0}, Optional.of(1), 1, true, JOIN_COMPILER, updateMemory, false);
 
         finish = false;
         Work<GroupByIdBlock> getGroupIdsWork = groupByHash.getGroupIds(page);

@@ -427,7 +427,8 @@ public class TestGroupedTopNBuilder
                 1,
                 false,
                 new JoinCompiler(createTestMetadataManager(), new FeaturesConfig()),
-                updateMemory);
+                updateMemory,
+                false);
     }
 
     /**

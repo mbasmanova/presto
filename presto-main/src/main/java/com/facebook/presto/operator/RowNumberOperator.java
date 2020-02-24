@@ -163,7 +163,7 @@ public class RowNumberOperator
         }
         else {
             int[] channels = Ints.toArray(partitionChannels);
-            this.groupByHash = Optional.of(createGroupByHash(partitionTypes, channels, hashChannel, expectedPositions, isDictionaryAggregationEnabled(operatorContext.getSession()), joinCompiler, this::updateMemoryReservation));
+            this.groupByHash = Optional.of(createGroupByHash(partitionTypes, channels, hashChannel, expectedPositions, isDictionaryAggregationEnabled(operatorContext.getSession()), joinCompiler, this::updateMemoryReservation, false));
         }
     }
 

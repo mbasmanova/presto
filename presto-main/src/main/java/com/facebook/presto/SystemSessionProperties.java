@@ -148,6 +148,7 @@ public final class SystemSessionProperties
     public static final String EXPERIMENTAL_FUNCTIONS_ENABLED = "experimental_functions_enabled";
     public static final String USE_LEGACY_SCHEDULER = "use_legacy_scheduler";
     public static final String OPTIMIZE_SUM_AGGREGATION = "optimize_sum_aggregation";
+    public static final String PREFER_ARRAY_AGGREGATION = "prefer_array_aggregation";
 
     private final List<PropertyMetadata<?>> sessionProperties;
 
@@ -751,6 +752,11 @@ public final class SystemSessionProperties
                         OPTIMIZE_SUM_AGGREGATION,
                         "Use custom accumulators for SUM aggregation over double, float and bigint",
                         false,
+                        false),
+                booleanProperty(
+                        PREFER_ARRAY_AGGREGATION,
+                        "Use array-based aggregation for group by with a single key of type bigint",
+                        false,
                         false));
     }
 
@@ -1271,5 +1277,10 @@ public final class SystemSessionProperties
     public static boolean isOptimizeSumAggregation(Session session)
     {
         return session.getSystemProperty(OPTIMIZE_SUM_AGGREGATION, Boolean.class);
+    }
+
+    public static boolean isPreferArrayAggregation(Session session)
+    {
+        return session.getSystemProperty(PREFER_ARRAY_AGGREGATION, Boolean.class);
     }
 }

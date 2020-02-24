@@ -172,7 +172,7 @@ public class BigintGroupByHash
                 Block block = page.getBlock(channels[i]);
 
                 // TODO Figure out how to handle nulls
-                verify(!block.isNull(position));
+//                verify(!block.isNull(position));
                 long value = types.get(i).getLong(block, position);
                 int length = offsets[i + 1] - offsets[i];
                 key |= (value & ((1L << length) - 1)) << offsets[i];

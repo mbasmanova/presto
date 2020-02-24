@@ -21,6 +21,8 @@ import com.facebook.presto.spi.PageBuilder;
 import com.facebook.presto.spi.type.Type;
 import com.facebook.presto.sql.gen.JoinCompiler;
 import com.google.common.annotations.VisibleForTesting;
+import it.unimi.dsi.fastutil.ints.IntIterator;
+import it.unimi.dsi.fastutil.ints.IntIterators;
 
 import java.util.List;
 import java.util.Optional;
@@ -42,7 +44,7 @@ public interface GroupByHash
             int expectedSize,
             JoinCompiler joinCompiler)
     {
-        return createGroupByHash(hashTypes, hashChannels, inputHashChannel, expectedSize, isDictionaryAggregationEnabled(session), joinCompiler, NOOP);
+        return createGroupByHash(hashTypes, hashChannels, inputHashChannel, expectedSize, isDictionaryAggregationEnabled(session), joinCompiler, NOOP, false);
     }
 
     static GroupByHash createGroupByHash(
@@ -52,9 +54,14 @@ public interface GroupByHash
             int expectedSize,
             boolean processDictionary,
             JoinCompiler joinCompiler,
-            UpdateMemory updateMemory)
+            UpdateMemory updateMemory,
+            boolean preferArrayAggregation)
     {
         if (hashTypes.size() == 1 && hashTypes.get(0).equals(BIGINT) && hashChannels.length == 1) {
+            if (preferArrayAggregation) {
+                return new ArrayBasedGroupByHash(hashChannels[0]);
+            }
+
             return new BigintGroupByHash(new SingleGroupByKeyProducer(hashChannels[0]), inputHashChannel, expectedSize, updateMemory);
         }
 
@@ -93,6 +100,11 @@ public interface GroupByHash
 
     int getGroupCount();
 
+    default IntIterator getGroupIds()
+    {
+        return IntIterators.fromTo(0, getGroupCount());
+    }
+
     void appendValuesTo(int groupId, PageBuilder pageBuilder, int outputChannelOffset);
 
     Work<?> addPage(Page page);
@@ -101,7 +113,7 @@ public interface GroupByHash
 
     boolean contains(int position, Page page, int[] hashChannels);
 
-    long getRawHash(int groupyId);
+    long getRawHash(int groupId);
 
     @VisibleForTesting
     int getCapacity();
