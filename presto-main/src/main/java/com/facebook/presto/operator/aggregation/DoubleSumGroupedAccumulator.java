@@ -19,6 +19,8 @@ import com.facebook.presto.operator.GroupByIdBlock;
 import com.facebook.presto.spi.Page;
 import com.facebook.presto.spi.block.Block;
 import com.facebook.presto.spi.block.BlockBuilder;
+import com.facebook.presto.spi.block.LazyBlock;
+import com.facebook.presto.spi.block.LazyBlockLoader.ValueConsumer;
 import com.facebook.presto.spi.block.RunLengthEncodedBlock;
 import com.facebook.presto.spi.type.Type;
 import org.openjdk.jol.info.ClassLayout;
@@ -72,6 +74,14 @@ public class DoubleSumGroupedAccumulator
             return;
         }
 
+        if (block instanceof LazyBlock) {
+            LazyBlock lazyBlock = (LazyBlock) block;
+            if (!lazyBlock.isLoaded()) {
+                lazyBlock.load(new Consumer(groupIdsBlock), false);
+                return;
+            }
+        }
+
         int positionCount = page.getPositionCount();
         for (int i = 0; i < positionCount; i++) {
             if (!block.isNull(i)) {
@@ -79,6 +89,25 @@ public class DoubleSumGroupedAccumulator
                 sums.add(groupId, DOUBLE.getDouble(block, i));
                 nulls.set(groupId, false);
             }
+        }
+    }
+
+    private final class Consumer
+            extends ValueConsumer
+    {
+        private final GroupByIdBlock groupByIdBlock;
+
+        private Consumer(GroupByIdBlock groupByIdBlock)
+        {
+            this.groupByIdBlock = groupByIdBlock;
+        }
+
+        @Override
+        public void acceptDouble(int position, double value)
+        {
+            long groupId = groupByIdBlock.getGroupIdUnchecked(position);
+            sums.add(groupId, value);
+            nulls.set(groupId, false);
         }
     }
 

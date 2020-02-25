@@ -900,6 +900,22 @@ public class OrcSelectiveRecordReader
 
             loaded = true;
         }
+
+        @Override
+        public final void load(ValueConsumer consumer, boolean includeNulls)
+        {
+            verify(!loaded);
+            verify(coercer == null);
+
+            try {
+                reader.read(offset, positions, positionCount, consumer, includeNulls);
+            }
+            catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+
+            loaded = true;
+        }
     }
 
     private static final class FilterFunctionWithStats

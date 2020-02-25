@@ -25,10 +25,13 @@ import com.facebook.presto.spi.block.Block;
 import com.facebook.presto.spi.block.BlockLease;
 import com.facebook.presto.spi.block.ClosingBlockLease;
 import com.facebook.presto.spi.block.IntArrayBlock;
+import com.facebook.presto.spi.block.LazyBlockLoader.ValueConsumer;
 import com.facebook.presto.spi.block.RunLengthEncodedBlock;
 import org.openjdk.jol.info.ClassLayout;
+import sun.misc.Unsafe;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,10 +47,28 @@ import static com.google.common.base.Preconditions.checkState;
 import static io.airlift.slice.SizeOf.sizeOf;
 import static java.lang.Float.floatToRawIntBits;
 import static java.util.Objects.requireNonNull;
+import static sun.misc.Unsafe.ARRAY_BOOLEAN_BASE_OFFSET;
 
 public class FloatSelectiveStreamReader
         implements SelectiveStreamReader
 {
+    private static final Unsafe unsafe;
+
+    static {
+        try {
+            // fetch theUnsafe object
+            Field field = Unsafe.class.getDeclaredField("theUnsafe");
+            field.setAccessible(true);
+            unsafe = (Unsafe) field.get(null);
+            if (unsafe == null) {
+                throw new RuntimeException("Unsafe access not available");
+            }
+        }
+        catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private static final int INSTANCE_SIZE = ClassLayout.parseClass(FloatSelectiveStreamReader.class).instanceSize();
     private static final Block NULL_BLOCK = REAL.createBlockBuilder(null, 1).appendNull().build();
 
@@ -122,6 +143,104 @@ public class FloatSelectiveStreamReader
         presentStream = presentStreamSource.openStream();
         dataStream = dataStreamSource.openStream();
         rowGroupOpen = true;
+    }
+
+    @Override
+    public void read(int offset, int[] positions, int positionCount, ValueConsumer consumer, boolean includeNulls)
+            throws IOException
+    {
+        checkState(!valuesInUse, "BlockLease hasn't been closed yet");
+        checkState(filter == null, "Filter is not supported when reading with a callback");
+
+        if (!rowGroupOpen) {
+            openRowGroup();
+        }
+
+        allNulls = false;
+
+        if (readOffset < offset) {
+            skip(offset - readOffset);
+        }
+
+        int streamPosition = 0;
+        if (dataStream == null && presentStream != null) {
+            presentStream.skip(positions[positionCount - 1]);
+            outputPositionCount = positionCount;
+            allNulls = true;
+            streamPosition = positions[positionCount - 1] + 1;
+        }
+        else {
+            if (positions[positionCount - 1] == positionCount - 1) {
+                // no skipping
+                if (presentStream != null) {
+                    // some nulls
+                    nulls = ensureCapacity(nulls, positionCount);
+                    int nullCount = presentStream.getUnsetBits(positionCount, nulls);
+                    if (nullCount == positionCount) {
+                        // all nulls
+                        if (includeNulls) {
+                            for (int i = 0; i < positionCount; i++) {
+                                consumer.acceptNull(i);
+                            }
+                        }
+                        allNulls = true;
+                    }
+                    else {
+                        if (includeNulls) {
+                            for (int i = 0; i < positionCount; i++) {
+                                if (nulls[i]) {
+                                    consumer.acceptNull(i);
+                                }
+                                else {
+                                    consumer.acceptFloat(i, dataStream.next());
+                                }
+                            }
+                        }
+                        else {
+                            for (int i = 0; i + 8 < positionCount; i += 8) {
+                                long flags = unsafe.getLong(nulls, (long) ARRAY_BOOLEAN_BASE_OFFSET + i) ^ 0x0101010101010101L;
+                                while (flags != 0) {
+                                    int low = Long.numberOfTrailingZeros(flags) >> 3;
+                                    flags &= flags - 1;
+
+                                    consumer.acceptFloat(i + low, dataStream.next());
+                                }
+                            }
+                            // TODO Process the remaining <8 values
+                        }
+                    }
+                }
+                else {
+                    // no nulls
+                    for (int i = 0; i < positionCount; i++) {
+                        consumer.acceptFloat(i, dataStream.next());
+                    }
+                }
+                streamPosition = positions[positionCount - 1] + 1;
+            }
+            else {
+                for (int i = 0; i < positionCount; i++) {
+                    int position = positions[i];
+                    if (position > streamPosition) {
+                        skip(position - streamPosition);
+                        streamPosition = position;
+                    }
+
+                    if (presentStream != null && !presentStream.nextBit()) {
+                        if (includeNulls) {
+                            consumer.acceptNull(position);
+                        }
+                    }
+                    else {
+                        consumer.acceptFloat(position, dataStream.next());
+                    }
+                    streamPosition++;
+                }
+            }
+            outputPositionCount = positionCount;
+        }
+
+        readOffset = offset + streamPosition;
     }
 
     @Override

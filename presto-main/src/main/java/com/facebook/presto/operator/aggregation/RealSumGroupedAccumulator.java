@@ -20,6 +20,8 @@ import com.facebook.presto.spi.Page;
 import com.facebook.presto.spi.block.Block;
 import com.facebook.presto.spi.block.BlockBuilder;
 import com.facebook.presto.spi.block.IntArrayBlock;
+import com.facebook.presto.spi.block.LazyBlock;
+import com.facebook.presto.spi.block.LazyBlockLoader.ValueConsumer;
 import com.facebook.presto.spi.block.RunLengthEncodedBlock;
 import com.facebook.presto.spi.type.Type;
 import org.openjdk.jol.info.ClassLayout;
@@ -98,7 +100,25 @@ public class RealSumGroupedAccumulator
             return;
         }
 
+        if (block instanceof LazyBlock) {
+            LazyBlock lazyBlock = (LazyBlock) block;
+            if (!lazyBlock.isLoaded()) {
+                lazyBlock.load(new Consumer(groupIdsBlock), false);
+                return;
+            }
+        }
+
         int positionCount = page.getPositionCount();
+
+        if (block instanceof RunLengthEncodedBlock) {
+            float value = intBitsToFloat(block.getInt(0));
+            for (int i = 0; i < positionCount; i++) {
+                int groupId = toIntExact(groupIdsBlock.getGroupIdUnchecked(i));
+                sums.add(groupId, value);
+                this.nulls.set(groupId, false);
+            }
+            return;
+        }
 
         boolean[] nulls = ((IntArrayBlock) block).getValueIsNull();
         if (nulls == null) {
@@ -120,6 +140,25 @@ public class RealSumGroupedAccumulator
                     this.nulls.set(groupId, false);
                 }
             }
+        }
+    }
+
+    private final class Consumer
+            extends ValueConsumer
+    {
+        private final GroupByIdBlock groupByIdBlock;
+
+        private Consumer(GroupByIdBlock groupByIdBlock)
+        {
+            this.groupByIdBlock = groupByIdBlock;
+        }
+
+        @Override
+        public void acceptFloat(int position, float value)
+        {
+            long groupId = groupByIdBlock.getGroupIdUnchecked(position);
+            sums.add(groupId, value);
+            nulls.set(groupId, false);
         }
     }
 

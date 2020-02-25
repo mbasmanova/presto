@@ -152,6 +152,7 @@ public class TestHivePushdownFilterQueries
     {
         Session preferArrayAggregation = Session.builder(getSession())
                 .setSystemProperty("prefer_array_aggregation", "true")
+                .setSystemProperty("optimize_sum_aggregation", "true")
                 .build();
         assertQuery(preferArrayAggregation, "SELECT cast(linenumber as bigint), sum(quantity) FROM lineitem GROUP BY cast(linenumber as bigint)");
 
@@ -169,6 +170,7 @@ public class TestHivePushdownFilterQueries
     {
         Session preferArrayAggregation = Session.builder(getSession())
                 .setSystemProperty("prefer_array_aggregation", "true")
+                .setSystemProperty("optimize_sum_aggregation", "true")
                 .build();
         assertQuerySucceeds(preferArrayAggregation, "WITH results_sum_over_ds AS (\n" +
                 "  SELECT \n" +

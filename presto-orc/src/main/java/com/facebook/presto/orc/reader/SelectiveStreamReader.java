@@ -15,6 +15,7 @@ package com.facebook.presto.orc.reader;
 
 import com.facebook.presto.spi.block.Block;
 import com.facebook.presto.spi.block.BlockLease;
+import com.facebook.presto.spi.block.LazyBlockLoader.ValueConsumer;
 
 import java.io.IOException;
 
@@ -32,6 +33,12 @@ public interface SelectiveStreamReader
      */
     int read(int offset, int[] positions, int positionCount)
             throws IOException;
+
+    default void read(int offset, int[] positions, int positionCount, ValueConsumer consumer, boolean includeNulls)
+            throws IOException
+    {
+        throw new UnsupportedOperationException();
+    }
 
     /**
      * @return an array of positions that passed the filter during most recent read(); the return

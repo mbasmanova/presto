@@ -173,7 +173,10 @@ public class LazyBlock
     @Override
     public long getSizeInBytes()
     {
-        assureLoaded();
+        if (block == null) {
+            return 0;
+        }
+//        assureLoaded();
         return block.getSizeInBytes();
     }
 
@@ -266,6 +269,15 @@ public class LazyBlock
     public boolean isLoaded()
     {
         return block != null;
+    }
+
+    public void load(LazyBlockLoader.ValueConsumer consumer, boolean includeNulls)
+    {
+        if (isLoaded()) {
+            throw new IllegalStateException("LazyBlock is already loaded");
+        }
+
+        loader.load(consumer, includeNulls);
     }
 
     @Override

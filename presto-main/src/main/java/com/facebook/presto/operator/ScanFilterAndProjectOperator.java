@@ -313,6 +313,12 @@ public class ScanFilterAndProjectOperator
             recordPageSourceRawInputStats();
             block.setBlock(loadedBlock);
         }
+
+        @Override
+        public void load(ValueConsumer consumer, boolean includeNulls)
+        {
+            delegateLazyBlock.load(consumer, includeNulls);
+        }
     }
 
     private void recordCursorInputStats(long positionCount)

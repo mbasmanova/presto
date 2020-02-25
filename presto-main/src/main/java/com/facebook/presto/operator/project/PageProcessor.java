@@ -81,7 +81,7 @@ public class PageProcessor
                 });
         this.projections = requireNonNull(projections, "projections is null").stream()
                 .map(projection -> {
-                    if (projection.getInputChannels().size() == 1 && projection.isDeterministic()) {
+                    if (projection.getInputChannels().size() == 1 && projection.isDeterministic() && !(projection instanceof InputPageProjection)) {
                         return new DictionaryAwarePageProjection(projection, dictionarySourceIdFunction);
                     }
                     return projection;
@@ -180,6 +180,8 @@ public class PageProcessor
                 else {
                     batchSize = Math.min(selectedPositions.size(), projectBatchSize);
                 }
+                batchSize = selectedPositions.size();
+
                 ProcessBatchResult result = processBatch(batchSize);
 
                 if (result.isYieldFinish()) {
@@ -201,15 +203,15 @@ public class PageProcessor
                 Page resultPage = result.getPage();
 
                 // if we produced a large page or if the expression is expensive, halve the batch size for the next call
-                long pageSize = resultPage.getSizeInBytes();
-                if (resultPage.getPositionCount() > 1 && (pageSize > MAX_PAGE_SIZE_IN_BYTES || expressionProfiler.isExpressionExpensive())) {
-                    projectBatchSize = projectBatchSize / 2;
-                }
+//                long pageSize = resultPage.getSizeInBytes();
+//                if (resultPage.getPositionCount() > 1 && (pageSize > MAX_PAGE_SIZE_IN_BYTES || expressionProfiler.isExpressionExpensive())) {
+//                    projectBatchSize = projectBatchSize / 2;
+//                }
 
                 // if we produced a small page, double the batch size for the next call
-                if (pageSize < MIN_PAGE_SIZE_IN_BYTES && projectBatchSize < MAX_BATCH_SIZE && !expressionProfiler.isExpressionExpensive()) {
-                    projectBatchSize = projectBatchSize * 2;
-                }
+//                if (pageSize < MIN_PAGE_SIZE_IN_BYTES && projectBatchSize < MAX_BATCH_SIZE && !expressionProfiler.isExpressionExpensive()) {
+//                    projectBatchSize = projectBatchSize * 2;
+//                }
 
                 // remove batch from selectedPositions and previouslyComputedResults
                 selectedPositions = selectedPositions.subRange(batchSize, selectedPositions.size());
@@ -270,16 +272,16 @@ public class PageProcessor
         {
             Block[] blocks = new Block[projections.size()];
 
-            int pageSize = 0;
+//            int pageSize = 0;
             SelectedPositions positionsBatch = selectedPositions.subRange(0, batchSize);
             for (int i = 0; i < projections.size(); i++) {
                 if (yieldSignal.isSet()) {
                     return ProcessBatchResult.processBatchYield();
                 }
 
-                if (positionsBatch.size() > 1 && pageSize > MAX_PAGE_SIZE_IN_BYTES) {
-                    return ProcessBatchResult.processBatchTooLarge();
-                }
+//                if (positionsBatch.size() > 1 && pageSize > MAX_PAGE_SIZE_IN_BYTES) {
+//                    return ProcessBatchResult.processBatchTooLarge();
+//                }
 
                 // if possible, use previouslyComputedResults produced in prior optimistic failure attempt
                 PageProjection projection = projections.get(i);
@@ -300,7 +302,7 @@ public class PageProcessor
                     blocks[i] = previouslyComputedResults[i];
                 }
 
-                pageSize += blocks[i].getSizeInBytes();
+//                pageSize += blocks[i].getSizeInBytes();
             }
             return ProcessBatchResult.processBatchSuccess(new Page(positionsBatch.size(), blocks));
         }

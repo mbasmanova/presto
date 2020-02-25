@@ -16,4 +16,32 @@ package com.facebook.presto.spi.block;
 public interface LazyBlockLoader<T extends Block>
 {
     void load(T block);
+
+    default void load(ValueConsumer consumer, boolean includeNulls)
+    {
+        throw new UnsupportedOperationException();
+    }
+
+    abstract class ValueConsumer
+    {
+        public void acceptLong(int position, long value)
+        {
+            throw new UnsupportedOperationException();
+        }
+
+        public void acceptDouble(int position, double value)
+        {
+            throw new UnsupportedOperationException();
+        }
+
+        public void acceptFloat(int position, float value)
+        {
+            throw new UnsupportedOperationException();
+        }
+
+        public void acceptNull(int position)
+        {
+            throw new UnsupportedOperationException();
+        }
+    }
 }

@@ -24,6 +24,7 @@ import com.facebook.presto.orc.stream.InputStreamSources;
 import com.facebook.presto.spi.block.Block;
 import com.facebook.presto.spi.block.BlockLease;
 import com.facebook.presto.spi.block.ClosingBlockLease;
+import com.facebook.presto.spi.block.LazyBlockLoader.ValueConsumer;
 import com.facebook.presto.spi.block.LongArrayBlock;
 import com.facebook.presto.spi.block.RunLengthEncodedBlock;
 import org.openjdk.jol.info.ClassLayout;
@@ -147,6 +148,54 @@ public class DoubleSelectiveStreamReader
         presentStream = presentStreamSource.openStream();
         dataStream = dataStreamSource.openStream();
         rowGroupOpen = true;
+    }
+
+    @Override
+    public void read(int offset, int[] positions, int positionCount, ValueConsumer consumer, boolean includeNulls)
+            throws IOException
+    {
+        checkState(!valuesInUse, "BlockLease hasn't been closed yet");
+        checkState(filter == null, "Filter is not supported when reading with a callback");
+
+        if (!rowGroupOpen) {
+            openRowGroup();
+        }
+
+        allNulls = false;
+
+        if (readOffset < offset) {
+            skip(offset - readOffset);
+        }
+
+        int streamPosition = 0;
+        if (dataStream == null && presentStream != null) {
+            presentStream.skip(positions[positionCount - 1]);
+            outputPositionCount = positionCount;
+            allNulls = true;
+            streamPosition = positions[positionCount - 1] + 1;
+        }
+        else {
+            for (int i = 0; i < positionCount; i++) {
+                int position = positions[i];
+                if (position > streamPosition) {
+                    skip(position - streamPosition);
+                    streamPosition = position;
+                }
+
+                if (presentStream != null && !presentStream.nextBit()) {
+                    if (includeNulls) {
+                        consumer.acceptNull(position);
+                    }
+                }
+                else {
+                    consumer.acceptDouble(position, dataStream.next());
+                }
+                streamPosition++;
+            }
+            outputPositionCount = positionCount;
+        }
+
+        readOffset = offset + streamPosition;
     }
 
     @Override
