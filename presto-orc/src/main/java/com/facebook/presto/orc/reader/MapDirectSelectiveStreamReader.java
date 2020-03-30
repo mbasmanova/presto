@@ -61,6 +61,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static io.airlift.slice.SizeOf.sizeOf;
 import static java.lang.Math.toIntExact;
+import static java.lang.String.format;
 import static java.util.Objects.requireNonNull;
 
 public class MapDirectSelectiveStreamReader
@@ -292,6 +293,7 @@ public class MapDirectSelectiveStreamReader
 
         int streamPosition = 0;
         int nestedOffset = 0;
+        int nestedPositionCount = 0;
 
         for (int i = 0; i < positionCount; i++) {
             int position = positions[i];
@@ -307,6 +309,7 @@ public class MapDirectSelectiveStreamReader
             nestedLengths[i] = length;
             nestedOffsets[i] = nestedOffset;
             nestedOffset += length;
+            nestedPositionCount += length;
         }
 
         outputPositionCount = positionCount;
@@ -314,7 +317,7 @@ public class MapDirectSelectiveStreamReader
 
         if (outputRequired) {
             nestedOffsets[positionCount] = nestedOffset;
-            int nestedPositionCount = populateNestedPositions(positionCount, nestedOffset);
+            populateNestedPositions(positionCount, nestedPositionCount);
             readKeyValueStreams(nestedPositionCount);
         }
         nestedReadOffset += nestedOffset;
@@ -393,6 +396,13 @@ public class MapDirectSelectiveStreamReader
 
     private int populateNestedPositions(int positionCount, int nestedOffset)
     {
+        int currentSize = nestedPositions == null ? 0 : nestedPositions.length;
+        if (currentSize < nestedOffset) {
+            System.out.println(format("[%s] Growing nestedPositions: %s -> %s", streamDescriptor.getStreamName(), currentSize, nestedOffset));
+        }
+        else {
+            System.out.println(format("[%s] Reusing nestedPositions: %s (need %s)", streamDescriptor.getStreamName(), currentSize, nestedOffset));
+        }
         nestedPositions = ensureCapacity(nestedPositions, nestedOffset);
         int nestedPositionCount = 0;
         for (int i = 0; i < positionCount; i++) {
@@ -400,6 +410,7 @@ public class MapDirectSelectiveStreamReader
                 nestedPositions[nestedPositionCount++] = nestedOffsets[i] + j;
             }
         }
+        System.out.println(format("[%s] Used %s", streamDescriptor.getStreamName(), nestedPositionCount));
         return nestedPositionCount;
     }
 
