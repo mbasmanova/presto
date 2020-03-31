@@ -21,7 +21,6 @@ import com.facebook.presto.orc.OrcDecompressor;
 import com.facebook.presto.orc.metadata.OrcType.OrcTypeKind;
 import io.airlift.slice.ByteArrays;
 import io.airlift.slice.FixedLengthSliceInput;
-import io.airlift.slice.Slice;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -42,7 +41,6 @@ import static io.airlift.slice.SizeOf.SIZE_OF_SHORT;
 import static io.airlift.slice.Slices.EMPTY_SLICE;
 import static java.lang.Math.toIntExact;
 import static java.util.Objects.requireNonNull;
-import static sun.misc.Unsafe.ARRAY_BYTE_BASE_OFFSET;
 
 public final class OrcInputStream
         extends InputStream
@@ -57,6 +55,7 @@ public final class OrcInputStream
     private int currentCompressedBlockOffset;
 
     private byte[] buffer;
+    private byte[] compressedBuffer;
     private byte[] decompressionResultBuffer;
     private int position;
     private int length;
@@ -459,12 +458,17 @@ public final class OrcInputStream
         if (chunkLength < 0 || chunkLength > compressedSliceInput.remaining()) {
             throw new OrcCorruptionException(orcDataSourceId, "The chunkLength (%s) must not be negative or greater than remaining size (%s)", chunkLength, compressedSliceInput.remaining());
         }
-        Slice chunk = compressedSliceInput.readSlice(chunkLength);
+
+        if (compressedBuffer == null || compressedBuffer.length < chunkLength) {
+            compressedBuffer = new byte[chunkLength];
+        }
+
+        int readCompressed = compressedSliceInput.read(compressedBuffer, 0, chunkLength);
 
         if (isUncompressed) {
-            buffer = (byte[]) chunk.getBase();
-            position = toIntExact(chunk.getAddress() - ARRAY_BYTE_BASE_OFFSET);
-            length = toIntExact(position + chunk.length());
+            buffer = compressedBuffer;
+            position = 0;
+            length = toIntExact(position + readCompressed);
         }
         else {
             buffer = decompressionResultBuffer;
@@ -492,7 +496,7 @@ public final class OrcInputStream
                     return buffer;
                 }
             };
-            length = decompressor.get().decompress((byte[]) chunk.getBase(), (int) (chunk.getAddress() - ARRAY_BYTE_BASE_OFFSET), chunk.length(), output);
+            length = decompressor.get().decompress(compressedBuffer, 0, readCompressed, output);
             decompressionResultBuffer = buffer;
             position = 0;
         }
