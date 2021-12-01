@@ -2063,7 +2063,7 @@ public class OrcTester
         return writeOrcFileColumnHive(outputFile, format, recordWriter, ImmutableList.of(type), ImmutableList.of(values));
     }
 
-    private static ObjectInspector getJavaObjectInspector(Type type)
+    public static ObjectInspector getJavaObjectInspector(Type type)
     {
         if (type.equals(BOOLEAN)) {
             return javaBooleanObjectInspector;
