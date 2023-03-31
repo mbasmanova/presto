@@ -14,6 +14,8 @@
 package com.facebook.presto.spark;
 
 import com.facebook.presto.Session;
+import com.facebook.presto.functionNamespace.FunctionNamespaceManagerPlugin;
+import com.facebook.presto.functionNamespace.json.JsonFileBasedFunctionNamespaceManagerFactory;
 import com.facebook.presto.hive.HiveExternalWorkerQueryRunner;
 import com.facebook.presto.spark.classloader_interface.PrestoSparkNativeExecutionShuffleManager;
 import com.facebook.presto.testing.ExpectedQueryRunner;
@@ -64,8 +66,10 @@ public class AbstractTestPrestoSparkQueries
     protected QueryRunner createQueryRunner()
     {
         // prevent to use the default Prestissimo config files since the Presto-Spark will generate the configs on-the-fly.
-        return PrestoSparkNativeQueryRunner.createPrestoSparkNativeQueryRunner(
+        PrestoSparkQueryRunner queryRunner = PrestoSparkNativeQueryRunner.createPrestoSparkNativeQueryRunner(
                 ImmutableMap.of("catalog.config-dir", "/"), getNativeExecutionShuffleConfigs());
+        setupJsonFunctionNamespaceManager(queryRunner);
+        return queryRunner;
     }
 
     @Override
@@ -113,4 +117,17 @@ public class AbstractTestPrestoSparkQueries
         sparkConfigs.put(FALLBACK_SPARK_SHUFFLE_MANAGER, "org.apache.spark.shuffle.sort.SortShuffleManager");
         return sparkConfigs.build();
     }
+
+    private void setupJsonFunctionNamespaceManager(QueryRunner queryRunner)
+    {
+        queryRunner.installPlugin(new FunctionNamespaceManagerPlugin());
+        queryRunner.loadFunctionNamespaceManager(
+                JsonFileBasedFunctionNamespaceManagerFactory.NAME,
+                "json",
+                ImmutableMap.of(
+                        "supported-function-languages", "CPP",
+                        "function-implementation-type", "CPP",
+                        "json-based-function-manager.path-to-function-definition", "src/test/resources/eq.json"));
+    }
+
 }
