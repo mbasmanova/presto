@@ -100,6 +100,12 @@ public class AbstractTestPrestoSparkQueries
         assertShuffleMetadata();
     }
 
+    protected void assertQuery(String sql, String otherSql)
+    {
+        assertQuery(getNativeSession(), sql, getQueryRunner().getDefaultSession(), otherSql);
+        assertShuffleMetadata();
+    }
+
     protected void assertQuerySucceeds(String sql)
     {
         assertQuerySucceeds(getNativeSession(), sql);

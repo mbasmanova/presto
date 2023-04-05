@@ -279,6 +279,7 @@ void PrestoServer::run() {
 
   static const std::string kPrestoDefaultPrefix{"presto.default."};
   velox::functions::prestosql::registerAllScalarFunctions(kPrestoDefaultPrefix);
+  velox::functions::prestosql::registerComparisonFunctions("json.test_schema.");
   velox::aggregate::prestosql::registerAllAggregateFunctions(
       kPrestoDefaultPrefix);
   velox::window::prestosql::registerAllWindowFunctions(kPrestoDefaultPrefix);

@@ -70,4 +70,11 @@ public class TestPrestoSparkNativeExecution
                 ".*Scalar function name not registered: presto.default.sequence.*");
         assertQueryFails("SELECT orderkey / 0 FROM orders", ".*division by zero.*");
     }
+
+    @Test
+    public void testJsonFileBasedFunction()
+    {
+        assertQuery("SELECT json.test_schema.eq(1, linenumber) FROM lineitem",
+                "SELECT linenumber = 1 FROM lineitem");
+    }
 }
