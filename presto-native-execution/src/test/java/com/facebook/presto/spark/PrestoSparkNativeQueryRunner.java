@@ -13,9 +13,11 @@
  */
 package com.facebook.presto.spark;
 
+import com.facebook.presto.hive.HiveExternalWorkerQueryRunner;
 import com.facebook.presto.hive.metastore.Database;
 import com.facebook.presto.hive.metastore.ExtendedHiveMetastore;
 import com.facebook.presto.spi.security.PrincipalType;
+import com.facebook.presto.testing.QueryRunner;
 import com.google.common.collect.ImmutableMap;
 
 import java.nio.file.Paths;
@@ -25,25 +27,40 @@ import java.util.Optional;
 import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.getNativeWorkerHiveProperties;
 import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.getNativeWorkerSystemProperties;
 import static com.facebook.presto.spark.PrestoSparkQueryRunner.METASTORE_CONTEXT;
+import static java.util.Objects.requireNonNull;
 
 public class PrestoSparkNativeQueryRunner
 {
+    private static final String SPARK_SHUFFLE_MANAGER = "spark.shuffle.manager";
+    private static final String FALLBACK_SPARK_SHUFFLE_MANAGER = "spark.fallback.shuffle.manager";
     private static final int AVAILABLE_CPU_COUNT = 4;
 
     private PrestoSparkNativeQueryRunner() {}
 
-    public static PrestoSparkQueryRunner createPrestoSparkNativeQueryRunner(Map<String, String> additionalConfigProperties, Map<String, String> additionalSparkProperties)
+    public static QueryRunner createQueryRunner()
     {
-        String dataDirectory = System.getProperty("DATA_DIR");
+        ImmutableMap.Builder<String, String> configBuilder = new ImmutableMap.Builder<String, String>()
+                .putAll(getNativeWorkerSystemProperties())
+                // Do not use default Prestissimo config files. Presto-Spark will generate the configs on-the-fly.
+                .put("catalog.config-dir", "/")
+                .put("native-execution-enabled", "true")
+                .put("spark.initial-partition-count", "1")
+                .put("spark.partition-count-auto-tune-enabled", "false");
 
-        ImmutableMap.Builder<String, String> configBuilder = ImmutableMap.builder();
-        configBuilder.putAll(getNativeWorkerSystemProperties()).putAll(additionalConfigProperties);
+        if (System.getProperty("NATIVE_PORT") == null) {
+            String path = requireNonNull(System.getProperty("PRESTO_SERVER"),
+                    "Native worker binary path is missing. " +
+                            "Add -DPRESTO_SERVER=/path/to/native/process/bin to your JVM arguments.");
+            configBuilder.put("native-execution-executable-path", path);
+        }
+
+        String dataDirectory = System.getProperty("DATA_DIR");
 
         PrestoSparkQueryRunner queryRunner = new PrestoSparkQueryRunner(
                 "hive",
                 configBuilder.build(),
                 getNativeWorkerHiveProperties(),
-                additionalSparkProperties,
+                getNativeExecutionShuffleConfigs(),
                 Optional.ofNullable(dataDirectory).map(Paths::get),
                 AVAILABLE_CPU_COUNT);
 
@@ -54,6 +71,14 @@ public class PrestoSparkNativeQueryRunner
         return queryRunner;
     }
 
+    private static Map<String, String> getNativeExecutionShuffleConfigs()
+    {
+        ImmutableMap.Builder<String, String> sparkConfigs = ImmutableMap.builder();
+        sparkConfigs.put(SPARK_SHUFFLE_MANAGER, "com.facebook.presto.spark.classloader_interface.PrestoSparkNativeExecutionShuffleManager");
+        sparkConfigs.put(FALLBACK_SPARK_SHUFFLE_MANAGER, "org.apache.spark.shuffle.sort.SortShuffleManager");
+        return sparkConfigs.build();
+    }
+
     private static Database createDatabaseMetastoreObject(String name)
     {
         return Database.builder()
@@ -61,5 +86,10 @@ public class PrestoSparkNativeQueryRunner
                 .setOwnerName("public")
                 .setOwnerType(PrincipalType.ROLE)
                 .build();
+    }
+
+    public static QueryRunner createJavaQueryRunner() throws Exception {
+        String dataDirectory = System.getProperty("DATA_DIR");
+        return HiveExternalWorkerQueryRunner.createJavaQueryRunner(Optional.ofNullable(dataDirectory).map(Paths::get), "legacy");
     }
 }

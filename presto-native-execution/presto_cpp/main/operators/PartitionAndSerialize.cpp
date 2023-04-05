@@ -57,6 +57,9 @@ class PartitionAndSerializeOperator : public Operator {
       return nullptr;
     }
 
+    LOG(ERROR) << "PartitionAndSerialize " << input_->toString();
+    LOG(ERROR) << "PartitionAndSerialize " << input_->toString(0, 5);
+
     const auto numInput = input_->size();
 
     // TODO Reuse output vector.
@@ -68,6 +71,9 @@ class PartitionAndSerializeOperator : public Operator {
     serializeRows(*output->childAt(1)->asFlatVector<StringView>());
 
     input_.reset();
+
+    LOG(ERROR) << "PartitionAndSerialize output " << output->toString();
+    LOG(ERROR) << "PartitionAndSerialize output " << output->toString(0, 5);
 
     return output;
   }

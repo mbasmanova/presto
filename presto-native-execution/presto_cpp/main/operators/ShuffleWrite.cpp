@@ -56,6 +56,7 @@ class ShuffleWriteOperator : public Operator {
     for (auto i = 0; i < input->size(); ++i) {
       auto partition = partitions->valueAt(i);
       auto data = serializedRows->valueAt(i);
+      LOG(ERROR) << "Shuffle::collect " << partition << ", " << data.size();
       shuffle_->collect(partition, std::string_view(data.data(), data.size()));
     }
   }

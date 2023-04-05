@@ -35,29 +35,10 @@ import static org.testng.Assert.assertTrue;
 public class AbstractTestPrestoSparkQueries
         extends AbstractTestQueryFramework
 {
-    private static final String SPARK_SHUFFLE_MANAGER = "spark.shuffle.manager";
-    private static final String FALLBACK_SPARK_SHUFFLE_MANAGER = "spark.fallback.shuffle.manager";
-
     @Override
     protected QueryRunner createQueryRunner()
     {
-        ImmutableMap.Builder<String, String> builder = new ImmutableMap.Builder<String, String>()
-                // Do not use default Prestissimo config files. Presto-Spark will generate the configs on-the-fly.
-                .put("catalog.config-dir", "/")
-                .put("native-execution-enabled", "true")
-                .put("spark.initial-partition-count", "1")
-                .put("spark.partition-count-auto-tune-enabled", "false");
-
-        if (System.getProperty("NATIVE_PORT") == null) {
-            String path = requireNonNull(System.getProperty("PRESTO_SERVER"),
-                    "Native worker binary path is missing. " +
-                    "Add -DPRESTO_SERVER=/path/to/native/process/bin to your JVM arguments.");
-            builder.put("native-execution-executable-path", path);
-        }
-
-        return PrestoSparkNativeQueryRunner.createPrestoSparkNativeQueryRunner(
-                builder.build(),
-                getNativeExecutionShuffleConfigs());
+        return PrestoSparkNativeQueryRunner.createQueryRunner();
     }
 
     @Override
@@ -86,13 +67,5 @@ public class AbstractTestPrestoSparkQueries
     {
         super.assertQuery(sql);
         assertShuffleMetadata();
-    }
-
-    protected Map<String, String> getNativeExecutionShuffleConfigs()
-    {
-        ImmutableMap.Builder<String, String> sparkConfigs = ImmutableMap.builder();
-        sparkConfigs.put(SPARK_SHUFFLE_MANAGER, "com.facebook.presto.spark.classloader_interface.PrestoSparkNativeExecutionShuffleManager");
-        sparkConfigs.put(FALLBACK_SPARK_SHUFFLE_MANAGER, "org.apache.spark.shuffle.sort.SortShuffleManager");
-        return sparkConfigs.build();
     }
 }
