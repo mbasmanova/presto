@@ -15,7 +15,6 @@ package com.facebook.presto.hive;
 
 import com.facebook.airlift.log.Logger;
 import com.facebook.airlift.log.Logging;
-import com.facebook.presto.nativeworker.AbstractNativeRunner;
 import com.facebook.presto.testing.QueryRunner;
 import com.facebook.presto.tests.DistributedQueryRunner;
 import com.google.common.collect.ImmutableList;
@@ -29,11 +28,27 @@ import java.nio.file.Paths;
 import java.util.Optional;
 import java.util.UUID;
 
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createBucketedCustomer;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createBucketedLineitemAndOrders;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createCustomer;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createEmptyTable;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createLineitem;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createNation;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createOrders;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createOrdersEx;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createOrdersHll;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createPart;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createPartSupp;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createPartitionedNation;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createPrestoBenchTables;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createRegion;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.createSupplier;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.getNativeWorkerHiveProperties;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.getNativeWorkerSystemProperties;
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.lang.String.format;
 
 public class HiveExternalWorkerQueryRunner
-        extends AbstractNativeRunner
 {
     private HiveExternalWorkerQueryRunner() {}
 

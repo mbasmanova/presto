@@ -15,7 +15,6 @@ package com.facebook.presto.spark;
 
 import com.facebook.presto.hive.metastore.Database;
 import com.facebook.presto.hive.metastore.ExtendedHiveMetastore;
-import com.facebook.presto.nativeworker.AbstractNativeRunner;
 import com.facebook.presto.spi.security.PrincipalType;
 import com.google.common.collect.ImmutableMap;
 
@@ -23,12 +22,15 @@ import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.getNativeWorkerHiveProperties;
+import static com.facebook.presto.nativeworker.NativeQueryRunnerUtils.getNativeWorkerSystemProperties;
 import static com.facebook.presto.spark.PrestoSparkQueryRunner.METASTORE_CONTEXT;
 
 public class PrestoSparkNativeQueryRunner
-        extends AbstractNativeRunner
 {
     private static final int AVAILABLE_CPU_COUNT = 4;
+
+    private PrestoSparkNativeQueryRunner() {}
 
     public static PrestoSparkQueryRunner createPrestoSparkNativeQueryRunner(Map<String, String> additionalConfigProperties, Map<String, String> additionalSparkProperties)
     {
