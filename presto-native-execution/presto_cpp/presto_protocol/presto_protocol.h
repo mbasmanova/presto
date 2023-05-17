@@ -1561,6 +1561,7 @@ namespace facebook::presto::protocol {
 struct BatchTaskUpdateRequest {
   TaskUpdateRequest taskUpdateRequest = {};
   std::shared_ptr<String> shuffleWriteInfo = {};
+  std::string broadcastBasePath = {};
 };
 void to_json(json& j, const BatchTaskUpdateRequest& p);
 void from_json(const json& j, BatchTaskUpdateRequest& p);

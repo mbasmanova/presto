@@ -6075,6 +6075,13 @@ void to_json(json& j, const BatchTaskUpdateRequest& p) {
       "BatchTaskUpdateRequest",
       "String",
       "shuffleWriteInfo");
+  to_json_key(
+      j,
+      "broadcastBasePath",
+      p.broadcastBasePath,
+      "TaskUpdateRequest",
+      "String",
+      "broadcastBasePath");
 }
 
 void from_json(const json& j, BatchTaskUpdateRequest& p) {
@@ -6092,6 +6099,13 @@ void from_json(const json& j, BatchTaskUpdateRequest& p) {
       "BatchTaskUpdateRequest",
       "String",
       "shuffleWriteInfo");
+  from_json_key(
+      j,
+      "broadcastBasePath",
+      p.broadcastBasePath,
+      "TaskUpdateRequest",
+      "String",
+      "broadcastBasePath");
 }
 } // namespace facebook::presto::protocol
 namespace facebook::presto::protocol {

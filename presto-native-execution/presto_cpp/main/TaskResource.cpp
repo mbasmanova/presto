@@ -246,8 +246,13 @@ proxygen::RequestHandler* TaskResource::createOrUpdateBatchTask(
               "config.properties");
         }
 
+        auto broadcastBasePath = batchUpdateRequest.broadcastBasePath;
         VeloxBatchQueryPlanConverter converter(
-            shuffleName, std::move(serializedShuffleWriteInfo), pool_);
+            shuffleName,
+            std::move(serializedShuffleWriteInfo),
+            broadcastBasePath,
+            pool_);
+
         auto planFragment = converter.toVeloxQueryPlan(
             prestoPlan, updateRequest.tableWriteInfo, taskId);
 

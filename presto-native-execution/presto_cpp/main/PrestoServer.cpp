@@ -32,6 +32,7 @@
 #include "presto_cpp/main/http/HttpServer.h"
 #include "presto_cpp/main/http/filters/AccessLogFilter.h"
 #include "presto_cpp/main/http/filters/StatsFilter.h"
+#include "presto_cpp/main/operators/BroadcastWrite.h"
 #include "presto_cpp/main/operators/LocalPersistentShuffle.h"
 #include "presto_cpp/main/operators/PartitionAndSerialize.h"
 #include "presto_cpp/main/operators/ShuffleInterface.h"
@@ -308,6 +309,7 @@ void PrestoServer::run() {
 
   facebook::velox::exec::ExchangeSource::registerFactory(
       PrestoExchangeSource::createExchangeSource);
+  // Batch shuffle exchange source
   facebook::velox::exec::ExchangeSource::registerFactory(
       operators::UnsafeRowExchangeSource::createExchangeSource);
 
@@ -641,6 +643,9 @@ void PrestoServer::registerCustomOperators() {
       std::make_unique<facebook::presto::operators::ShuffleWriteTranslator>());
   facebook::velox::exec::Operator::registerOperator(
       std::make_unique<operators::ShuffleReadTranslator>());
+  facebook::velox::exec::Operator::registerOperator(
+      std::make_unique<
+          facebook::presto::operators::BroadcastWriteTranslator>());
 }
 
 void PrestoServer::registerFunctions() {
