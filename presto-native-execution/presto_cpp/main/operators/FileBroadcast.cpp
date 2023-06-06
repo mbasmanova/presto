@@ -15,7 +15,10 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include "velox/common/file/File.h"
 #include "velox/serializers/PrestoSerializer.h"
+#include "velox/vector/FlatVector.h"
+
 using namespace facebook::velox::exec;
 using namespace facebook::velox;
 
@@ -27,22 +30,23 @@ FileBroadcast::FileBroadcast(const std::string& basePath)
   fileSystem_ = velox::filesystems::getFileSystem(basePath, nullptr);
 }
 
-std::shared_ptr<BroadcastFileWriter> FileBroadcast::createWriter(
+namespace {
+
+std::string makeUuid() {
+  return boost::lexical_cast<std::string>(boost::uuids::random_generator()());
+}
+} // namespace
+
+std::unique_ptr<BroadcastFileWriter> FileBroadcast::createWriter(
     memory::MemoryPool* pool,
     const RowTypePtr& inputType) {
   fileSystem_->mkdir(basePath_);
   auto filename =
       fmt::format("{}/file_broadcast_{}.bin", basePath_, makeUuid());
-  LOG(INFO) << "Opening broadcast file for write: " << filename;
-  auto writeFile = fileSystem_->openFileForWrite(filename);
-  auto broadcastFileWriter = std::make_shared<BroadcastFileWriter>(
-      std::move(writeFile), filename, pool, inputType);
-  return broadcastFileWriter;
-}
 
-// static
-std::string FileBroadcast::makeUuid() {
-  return boost::lexical_cast<std::string>(boost::uuids::random_generator()());
+  auto writeFile = fileSystem_->openFileForWrite(filename);
+  return std::make_unique<BroadcastFileWriter>(
+      std::move(writeFile), filename, pool, inputType);
 }
 
 BroadcastFileWriter::BroadcastFileWriter(
@@ -59,9 +63,8 @@ BroadcastFileWriter::BroadcastFileWriter(
 void BroadcastFileWriter::collect(RowVectorPtr input) {
   serialize(input);
 }
-void BroadcastFileWriter::noMoreData() {
-  writeFile_->flush();
-}
+
+void BroadcastFileWriter::noMoreData() {}
 
 RowVectorPtr BroadcastFileWriter::fileStats() {
   auto data = BaseVector::create<FlatVector<StringView>>(VARCHAR(), 1, pool_);
@@ -69,14 +72,12 @@ RowVectorPtr BroadcastFileWriter::fileStats() {
   return std::make_shared<RowVector>(
       pool_,
       ROW({"filepath"}, {VARCHAR()}),
-      BufferPtr(nullptr),
+      nullptr,
       1,
       std::vector<VectorPtr>({std::move(data)}));
 }
 
-void BroadcastFileWriter::serialize(
-    const RowVectorPtr& rowVector,
-    const VectorSerde::Options* serdeOptions) {
+void BroadcastFileWriter::serialize(const RowVectorPtr& rowVector) {
   auto numRows = rowVector->size();
   std::vector<IndexRange> rows(numRows);
   for (int i = 0; i < numRows; i++) {
@@ -84,12 +85,10 @@ void BroadcastFileWriter::serialize(
   }
 
   auto arena = std::make_unique<StreamArena>(pool_);
-  auto serializer =
-      serde_->createSerializer(inputType_, numRows, arena.get(), serdeOptions);
+  auto serializer = serde_->createSerializer(inputType_, numRows, arena.get());
 
   serializer->append(rowVector, folly::Range(rows.data(), numRows));
-  IOBufOutputStream out(
-      *pool_, nullptr, std::max<int64_t>(64 * 1024, rowVector->size()));
+  IOBufOutputStream out(*pool_);
   serializer->flush(&out);
   auto iobuf = out.getIOBuf();
   for (auto& range : *iobuf) {

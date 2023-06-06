@@ -35,20 +35,17 @@ class BroadcastWriteOperator : public Operator {
             operatorId,
             planNode->id(),
             "BroadcastWrite") {
-    const auto& basePath = planNode->broadcastWriteBasePath();
-    auto fileBroadcast = FileBroadcast(basePath);
+    auto fileBroadcast = FileBroadcast(planNode->basePath());
     fileBroadcastWriter_ = fileBroadcast.createWriter(
         operatorCtx_->pool(), planNode->sources().back()->outputType());
   }
 
   bool needsInput() const override {
-    return !noMoreInput_;
+    return true;
   }
 
   void addInput(RowVectorPtr input) override {
-    // write pages to buffer/file
-    input_ = std::move(input);
-    fileBroadcastWriter_->collect(input_);
+    fileBroadcastWriter_->collect(input);
   }
 
   void noMoreInput() override {
@@ -57,10 +54,11 @@ class BroadcastWriteOperator : public Operator {
   }
 
   RowVectorPtr getOutput() override {
-    if (!noMoreInput_ || !input_) {
+    if (!noMoreInput_ || finished_) {
       return nullptr;
     }
-    input_.reset();
+
+    finished_ = true;
     return fileBroadcastWriter_->fileStats();
   }
 
@@ -69,11 +67,12 @@ class BroadcastWriteOperator : public Operator {
   }
 
   bool isFinished() override {
-    return noMoreInput_;
+    return finished_;
   }
 
  private:
-  std::shared_ptr<BroadcastFileWriter> fileBroadcastWriter_;
+  std::unique_ptr<BroadcastFileWriter> fileBroadcastWriter_;
+  bool finished_{false};
 };
 } // namespace
 
@@ -90,7 +89,8 @@ velox::core::PlanNodePtr BroadcastWriteNode::create(
     void* context) {
   return std::make_shared<BroadcastWriteNode>(
       deserializePlanNodeId(obj),
-      ISerializable::deserialize<std::string>(obj["broadcastWriteBasePath"], context),
+      ISerializable::deserialize<std::string>(
+          obj["broadcastWriteBasePath"], context),
       ISerializable::deserialize<std::vector<velox::core::PlanNode>>(
           obj["sources"], context)[0]);
 }

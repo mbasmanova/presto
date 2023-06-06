@@ -43,7 +43,7 @@ class BroadcastWriteNode : public velox::core::PlanNode {
     return sources_;
   }
 
-  const std::string& broadcastWriteBasePath() const {
+  const std::string& basePath() const {
     return basePath_;
   }
 

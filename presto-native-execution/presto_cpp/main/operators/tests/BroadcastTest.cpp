@@ -72,8 +72,9 @@ class BroadcastTest : public exec::test::OperatorTestBase {
     ASSERT_EQ(results.size(), 1);
 
     // Validate file path prefix is consistent
-    auto broadcastFilePath = results.back()->childAt(0)->toString(0);
-    ASSERT_TRUE(boost::starts_with(broadcastFilePath, basePath));
+    auto broadcastFilePath =
+        results.back()->childAt(0)->as<SimpleVector<StringView>>()->valueAt(0);
+    ASSERT_EQ(broadcastFilePath.str().find(basePath), 0);
 
     cleanupDirectory(basePath);
   }

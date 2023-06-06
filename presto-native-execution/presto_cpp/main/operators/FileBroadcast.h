@@ -13,43 +13,40 @@
  */
 #pragma once
 
-#include <fmt/format.h>
 #include "velox/common/file/FileSystems.h"
-#include "velox/exec/Operator.h"
-
-using namespace facebook::velox;
+#include "velox/common/memory/MemoryPool.h"
+#include "velox/vector/ComplexVector.h"
+#include "velox/vector/VectorStream.h"
 
 namespace facebook::presto::operators {
 
 class BroadcastFileWriter {
  public:
   BroadcastFileWriter(
-      std::unique_ptr<WriteFile> writeFile,
+      std::unique_ptr<velox::WriteFile> writeFile,
       std::string_view filename,
       velox::memory::MemoryPool* pool,
-      const RowTypePtr& inputType);
+      const velox::RowTypePtr& inputType);
 
   virtual ~BroadcastFileWriter() = default;
 
   /// Write to file
-  void collect(RowVectorPtr input);
+  void collect(velox::RowVectorPtr input);
 
   /// Flush the data
   void noMoreData();
 
-  // File stats - path, size, checksum, num rows
-  RowVectorPtr fileStats();
-
-  void serialize(
-      const RowVectorPtr& rowVector,
-      const VectorSerde::Options* serdeOptions = nullptr);
+  /// File stats - path, size, checksum, num rows.
+  velox::RowVectorPtr fileStats();
 
  private:
-  std::unique_ptr<WriteFile> writeFile_;
+  void serialize(const velox::RowVectorPtr& rowVector);
+
+  std::unique_ptr<velox::WriteFile> writeFile_;
   std::string filename_;
   velox::memory::MemoryPool* pool_;
-  std::unique_ptr<VectorSerde> serde_;
-  const RowTypePtr& inputType_;
+  std::unique_ptr<velox::VectorSerde> serde_;
+  const velox::RowTypePtr& inputType_;
 };
 
 class FileBroadcast {
@@ -58,11 +55,9 @@ class FileBroadcast {
 
   virtual ~FileBroadcast() = default;
 
-  std::shared_ptr<BroadcastFileWriter> createWriter(
-      memory::MemoryPool* pool,
-      const RowTypePtr& inputType); // add stage, task id
-
-  static std::string makeUuid();
+  std::unique_ptr<BroadcastFileWriter> createWriter(
+      velox::memory::MemoryPool* pool,
+      const velox::RowTypePtr& inputType); // add stage, task id
 
  private:
   std::shared_ptr<velox::filesystems::FileSystem> fileSystem_;
