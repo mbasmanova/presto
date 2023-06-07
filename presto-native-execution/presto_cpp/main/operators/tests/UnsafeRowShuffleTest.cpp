@@ -513,7 +513,8 @@ class UnsafeRowShuffleTest : public exec::test::OperatorTestBase {
     }
   }
 
-  void fuzzerTest(bool replicateNullAndAny, size_t numPartitions) {
+  void
+  fuzzerTest(bool replicateNullAndAny, size_t numPartitions, double nullRatio) {
     // For unit testing, these numbers are set to relatively small values.
     // For stress testing, the following parameters and the fuzzer vector,
     // string and container sizes can be bumped up.
@@ -524,7 +525,7 @@ class UnsafeRowShuffleTest : public exec::test::OperatorTestBase {
     // Set up the fuzzer parameters.
     VectorFuzzer::Options opts;
     opts.vectorSize = 1000;
-    opts.nullRatio = 0.1;
+    opts.nullRatio = nullRatio;
     opts.containerHasNulls = false;
     opts.dictionaryHasNulls = false;
     opts.stringVariableLength = true;
@@ -699,7 +700,7 @@ TEST_F(UnsafeRowShuffleTest, replicateNullPartitionStrategy) {
            50,
            std::nullopt,
            std::nullopt, // Replicated Null for partition 0
-           50, // Replicated Null for partition 1
+           50, // Replicated Null for partition 0
            std::nullopt, // Replicated Null for partition 2
            50}), // Replicated Null for partition 2
   });
@@ -725,6 +726,42 @@ TEST_F(UnsafeRowShuffleTest, replicateAnyPartitionStrategy) {
   auto plan = exec::test::PlanBuilder()
                   .values({data}, true)
                   .addNode(addPartitionAndSerializeNode(7, true))
+                  .planNode();
+
+  testPartitionAndSerialize(plan, expectedData);
+}
+
+TEST_F(UnsafeRowShuffleTest, partitionSingleInput) {
+  auto data = vectorMaker_.rowVector({
+      makeNullableFlatVector<int32_t>({1}),
+      makeNullableFlatVector<int64_t>({10}),
+  });
+  auto expectedData = vectorMaker_.rowVector({
+      makeNullableFlatVector<int32_t>({1}),
+      makeNullableFlatVector<int64_t>({10}),
+  });
+
+  auto plan = exec::test::PlanBuilder()
+                  .values({data}, true)
+                  .addNode(addPartitionAndSerializeNode(2, false))
+                  .planNode();
+
+  testPartitionAndSerialize(plan, expectedData);
+}
+
+TEST_F(UnsafeRowShuffleTest, partitionSingleNullInput) {
+  auto data = vectorMaker_.rowVector({
+      makeNullableFlatVector<int32_t>({std::nullopt}),
+      makeNullableFlatVector<int64_t>({10}),
+  });
+  auto expectedData = vectorMaker_.rowVector({
+      makeNullableFlatVector<int32_t>({std::nullopt}),
+      makeNullableFlatVector<int64_t>({10}),
+  });
+
+  auto plan = exec::test::PlanBuilder()
+                  .values({data}, true)
+                  .addNode(addPartitionAndSerializeNode(2, false))
                   .planNode();
 
   testPartitionAndSerialize(plan, expectedData);
@@ -852,13 +889,18 @@ TEST_F(UnsafeRowShuffleTest, persistentShuffle) {
 }
 
 TEST_F(UnsafeRowShuffleTest, persistentShuffleFuzz) {
-  fuzzerTest(false, 1);
+  fuzzerTest(false, 1, 0.1);
 }
 
 TEST_F(UnsafeRowShuffleTest, persistentShuffleFuzzWithReplicateNullAndAny) {
-  fuzzerTest(true, 1);
-  fuzzerTest(true, 3);
-  fuzzerTest(true, 4);
+  fuzzerTest(true, 1, 0.5);
+  fuzzerTest(true, 3, 0.5);
+  fuzzerTest(true, 4, 0.5);
+}
+
+TEST_F(UnsafeRowShuffleTest, persistentShuffleFuzzWithNullSkew) {
+  fuzzerTest(true, 10, 0.9);
+  fuzzerTest(true, 10, 1);
 }
 
 TEST_F(UnsafeRowShuffleTest, partitionAndSerializeOperator) {
