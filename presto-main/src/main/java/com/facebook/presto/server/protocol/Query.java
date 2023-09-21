@@ -38,6 +38,7 @@ import com.facebook.presto.spi.QueryId;
 import com.facebook.presto.spi.function.SqlFunctionId;
 import com.facebook.presto.spi.function.SqlInvokedFunction;
 import com.facebook.presto.spi.page.PagesSerde;
+import com.facebook.presto.spi.page.PagesSerdeUtil;
 import com.facebook.presto.spi.page.SerializedPage;
 import com.facebook.presto.spi.security.SelectedRole;
 import com.facebook.presto.spi.tracing.Tracer;
@@ -50,6 +51,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import io.airlift.slice.DynamicSliceOutput;
 import io.airlift.units.DataSize;
 import io.airlift.units.Duration;
 
@@ -61,6 +63,8 @@ import javax.ws.rs.core.UriBuilder;
 import javax.ws.rs.core.UriInfo;
 
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -307,7 +311,7 @@ class Query
         return removedSessionFunctions;
     }
 
-    public synchronized ListenableFuture<QueryResults> waitForResults(long token, UriInfo uriInfo, String scheme, Duration wait, DataSize targetResultSize)
+    public synchronized ListenableFuture<QueryResults> waitForResults(long token, UriInfo uriInfo, String scheme, Duration wait, DataSize targetResultSize, boolean binaryResults)
     {
         // before waiting, check if this request has already been processed and cached
         Optional<QueryResults> cachedResult = getCachedResult(token);
@@ -323,7 +327,7 @@ class Query
                 timeoutExecutor);
 
         // when state changes, fetch the next result
-        return Futures.transform(futureStateChange, ignored -> getNextResultWithRetry(token, uriInfo, scheme, targetResultSize), resultsProcessorExecutor);
+        return Futures.transform(futureStateChange, ignored -> getNextResultWithRetry(token, uriInfo, scheme, targetResultSize, binaryResults), resultsProcessorExecutor);
     }
 
     private synchronized ListenableFuture<?> getFutureStateChange()
@@ -376,9 +380,9 @@ class Query
         return Optional.empty();
     }
 
-    private synchronized QueryResults getNextResultWithRetry(long token, UriInfo uriInfo, String scheme, DataSize targetResultSize)
+    private synchronized QueryResults getNextResultWithRetry(long token, UriInfo uriInfo, String scheme, DataSize targetResultSize, boolean binaryResults)
     {
-        QueryResults queryResults = getNextResult(token, uriInfo, scheme, targetResultSize);
+        QueryResults queryResults = getNextResult(token, uriInfo, scheme, targetResultSize, binaryResults);
         if (queryResults.getError() == null || !queryResults.getError().isRetriable()) {
             return queryResults;
         }
@@ -410,6 +414,7 @@ class Query
                 createRetryUri(scheme, uriInfo),
                 queryResults.getColumns(),
                 null,
+                null,
                 StatementStats.builder()
                         .setState(WAITING_FOR_PREREQUISITES.toString())
                         .setWaitingForPrerequisites(true)
@@ -420,7 +425,7 @@ class Query
                 queryResults.getUpdateCount());
     }
 
-    private synchronized QueryResults getNextResult(long token, UriInfo uriInfo, String scheme, DataSize targetResultSize)
+    private synchronized QueryResults getNextResult(long token, UriInfo uriInfo, String scheme, DataSize targetResultSize, boolean binaryResults)
     {
         // check if the result for the token have already been created
         Optional<QueryResults> cachedResult = getCachedResult(token);
@@ -442,25 +447,48 @@ class Query
         // last page is removed.  If another thread observes this state before the response is cached
         // the pages will be lost.
         Iterable<List<Object>> data = null;
+        List<Object> binaryData = null;
         try {
-            ImmutableList.Builder<RowIterable> pages = ImmutableList.builder();
-            long bytes = 0;
             long rows = 0;
+            long bytes = 0;
             long targetResultBytes = targetResultSize.toBytes();
-            while (bytes < targetResultBytes) {
-                SerializedPage serializedPage = exchangeClient.pollPage();
-                if (serializedPage == null) {
-                    break;
-                }
+            if (binaryResults) {
+                binaryData = new ArrayList<>();
+                while (bytes < targetResultBytes) {
+                    SerializedPage serializedPage = exchangeClient.pollPage();
+                    if (serializedPage == null) {
+                        break;
+                    }
 
-                Page page = serde.deserialize(serializedPage);
-                bytes += page.getLogicalSizeInBytes();
-                rows += page.getPositionCount();
-                pages.add(new RowIterable(session.toConnectorSession(), types, page));
+                    rows += serializedPage.getPositionCount();
+                    bytes += serializedPage.getSizeInBytes();
+
+                    DynamicSliceOutput sliceOutput = new DynamicSliceOutput(1000);
+                    PagesSerdeUtil.writeSerializedPage(sliceOutput, serializedPage);
+
+                    String encodedPage = Base64.getEncoder().encodeToString(sliceOutput.slice().byteArray());
+                    binaryData.add(encodedPage);
+                }
+            }
+            else {
+                ImmutableList.Builder<RowIterable> pages = ImmutableList.builder();
+                while (bytes < targetResultBytes) {
+                    SerializedPage serializedPage = exchangeClient.pollPage();
+                    if (serializedPage == null) {
+                        break;
+                    }
+
+                    Page page = serde.deserialize(serializedPage);
+                    bytes += page.getLogicalSizeInBytes();
+                    rows += page.getPositionCount();
+                    pages.add(new RowIterable(session.toConnectorSession(), types, page));
+                }
+                if (rows > 0) {
+                    // client implementations do not properly handle empty list of data
+                    data = Iterables.concat(pages.build());
+                }
             }
             if (rows > 0) {
-                // client implementations do not properly handle empty list of data
-                data = Iterables.concat(pages.build());
                 hasProducedResult = true;
             }
         }
@@ -508,7 +536,7 @@ class Query
 
         URI nextResultsUri = null;
         if (nextToken.isPresent()) {
-            nextResultsUri = createNextResultsUri(scheme, uriInfo, nextToken.getAsLong());
+            nextResultsUri = createNextResultsUri(scheme, uriInfo, nextToken.getAsLong(), binaryResults);
         }
 
         // update catalog, schema, and path
@@ -542,6 +570,7 @@ class Query
                 nextResultsUri,
                 columns,
                 data,
+                binaryData,
                 toStatementStats(queryInfo),
                 toQueryError(queryInfo),
                 queryInfo.getWarnings(),
@@ -596,7 +625,7 @@ class Query
         return Futures.transformAsync(queryManager.getStateChange(queryId, currentState), this::queryDoneFuture, directExecutor());
     }
 
-    private synchronized URI createNextResultsUri(String scheme, UriInfo uriInfo, long nextToken)
+    private synchronized URI createNextResultsUri(String scheme, UriInfo uriInfo, long nextToken, boolean binaryResults)
     {
         UriBuilder uri = uriInfo.getBaseUriBuilder()
                 .scheme(scheme)
