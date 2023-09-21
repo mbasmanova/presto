@@ -104,6 +104,38 @@ public class ExecutingStatementResource
             @Context UriInfo uriInfo,
             @Suspended AsyncResponse asyncResponse)
     {
+        getQueryResults(queryId, token, slug, maxWait, targetResultSize, proto, xPrestoPrefixUrl, false, uriInfo, asyncResponse);
+    }
+
+    @GET
+    @Path("/v1/binary/statement/executing/{queryId}/{token}")
+    @Produces(MediaType.APPLICATION_JSON)
+    public void getQueryBinaryResults(
+            @PathParam("queryId") QueryId queryId,
+            @PathParam("token") long token,
+            @QueryParam("slug") String slug,
+            @QueryParam("maxWait") Duration maxWait,
+            @QueryParam("targetResultSize") DataSize targetResultSize,
+            @HeaderParam(X_FORWARDED_PROTO) String proto,
+            @HeaderParam(PRESTO_PREFIX_URL) String xPrestoPrefixUrl,
+            @Context UriInfo uriInfo,
+            @Suspended AsyncResponse asyncResponse)
+    {
+        getQueryResults(queryId, token, slug, maxWait, targetResultSize, proto, xPrestoPrefixUrl, true, uriInfo, asyncResponse);
+    }
+
+    private void getQueryResults(
+            QueryId queryId,
+            long token,
+            String slug,
+            Duration maxWait,
+            DataSize targetResultSize,
+            String proto,
+            String xPrestoPrefixUrl,
+            boolean binaryResults,
+            UriInfo uriInfo,
+            AsyncResponse asyncResponse)
+    {
         Duration wait = WAIT_ORDERING.min(MAX_WAIT_TIME, maxWait);
         if (targetResultSize == null) {
             targetResultSize = DEFAULT_TARGET_RESULT_SIZE;
@@ -125,7 +157,7 @@ public class ExecutingStatementResource
                 acquirePermitAsync,
                 acquirePermitTimeSeconds -> {
                     queryRateLimiter.addRateLimiterBlockTime(new Duration(acquirePermitTimeSeconds, SECONDS));
-                    return query.waitForResults(token, uriInfo, effectiveFinalProto, wait, effectiveFinalTargetResultSize);
+                    return query.waitForResults(token, uriInfo, effectiveFinalProto, wait, effectiveFinalTargetResultSize, binaryResults);
                 },
                 responseExecutor);
         ListenableFuture<Response> queryResultsFuture = transform(
